@@ -1,0 +1,42 @@
+# CLAUDE.md
+
+## プロジェクト
+
+android-tab-harvest: ADB経由でAndroid端末のChromeタブを吸い上げてWeb UIで管理するツール。
+
+## 必ず読むドキュメント
+
+- SPEC.md: DBスキーマ、URL正規化ルール、Collector仕様、Web UI仕様
+- DEVELOPMENT_GUIDE.md: 実装フェーズ、ディレクトリ構成、開発ルール
+
+## 技術スタック
+
+- Python 3.12+, FastAPI, Jinja2, HTMX, aiosqlite, httpx
+- SQLite (tabs.db)
+- ADB + Chrome DevTools Protocol
+
+## 開発ルール
+
+- TDD: 機能実装前にテストを書く
+- conventional commit: `feat:`, `test:`, `fix:`, `refactor:`, `docs:`
+- 全関数に型アノテーション
+- collector.py は同期処理、server.py は async
+- エラーは握りつぶさず、graceful に処理してログ出力
+
+## テスト
+
+```bash
+source .venv/bin/activate
+pytest tests/ -v
+```
+
+## 起動
+
+```bash
+# 収集
+python collector.py
+
+# Web UI
+python server.py
+# → http://localhost:8765
+```
