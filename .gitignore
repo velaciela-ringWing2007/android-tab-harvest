@@ -5,3 +5,18 @@ tabs.db
 *.db-journal
 *.db-wal
 .pytest_cache/
+
+# 個人データ
+*.csv
+*.json.bak
+
+# 環境設定
+.env
+*.env.local
+
+# rclone設定
+rclone.conf
+
+# OS
+.DS_Store
+Thumbs.db
