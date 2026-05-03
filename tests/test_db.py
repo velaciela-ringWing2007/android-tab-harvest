@@ -9,7 +9,7 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from db import get_db, init_db
+from db import add_sighting, get_db, init_db, upsert_device, upsert_tab
 
 
 @pytest.fixture
@@ -191,3 +191,108 @@ class TestSchemaConstraints:
             row = await cur.fetchone()
         assert row is not None
         assert row[0] == 0
+
+
+class TestUpsertDevice:
+    async def test_inserts_new_device(self, db_path: str) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            device_id = await upsert_device(conn, "SERIAL_A", "Pixel 9", 1700000000)
+            await conn.commit()
+        assert device_id == 1
+
+    async def test_returns_existing_id_for_same_serial(self, db_path: str) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            id1 = await upsert_device(conn, "SERIAL_A", "Pixel 9", 1700000000)
+            await conn.commit()
+            id2 = await upsert_device(conn, "SERIAL_A", "Pixel 9", 1700000999)
+            await conn.commit()
+        assert id1 == id2
+
+    async def test_does_not_overwrite_existing_model(self, db_path: str) -> None:
+        # 既存デバイスのmodelは更新しない（ユーザー領域）
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            await upsert_device(conn, "SERIAL_A", "OriginalModel", 1700000000)
+            await conn.commit()
+            await upsert_device(conn, "SERIAL_A", "ChangedModel", 1700000999)
+            await conn.commit()
+            cur = await conn.execute("SELECT model FROM devices WHERE serial = ?", ("SERIAL_A",))
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "OriginalModel"
+
+
+class TestUpsertTab:
+    async def test_inserts_new_tab_with_unread_status(self, db_path: str) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            tab_id = await upsert_tab(
+                conn, "https://example.com/", "h1", "Title", 1700000000
+            )
+            await conn.commit()
+            cur = await conn.execute(
+                "SELECT status, created_at, updated_at FROM tabs WHERE id = ?", (tab_id,)
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "unread"
+        assert row[1] == 1700000000
+        assert row[2] == 1700000000
+
+    async def test_returns_same_id_for_same_hash(self, db_path: str) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            id1 = await upsert_tab(conn, "https://example.com/", "h1", "T1", 1700000000)
+            await conn.commit()
+            id2 = await upsert_tab(conn, "https://example.com/", "h1", "T2", 1700000999)
+            await conn.commit()
+        assert id1 == id2
+
+    async def test_updates_title_and_updated_at(self, db_path: str) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            await upsert_tab(conn, "https://example.com/", "h1", "Old Title", 1700000000)
+            await conn.commit()
+            await upsert_tab(conn, "https://example.com/", "h1", "New Title", 1700000999)
+            await conn.commit()
+            cur = await conn.execute(
+                "SELECT title, created_at, updated_at FROM tabs WHERE url_hash = ?", ("h1",)
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == "New Title"
+        assert row[1] == 1700000000  # created_at は不変
+        assert row[2] == 1700000999  # updated_at は更新
+
+
+class TestAddSighting:
+    async def test_records_sighting(self, db_path: str) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            device_id = await upsert_device(conn, "S1", "M1", 1700000000)
+            tab_id = await upsert_tab(conn, "https://example.com/", "h1", "T", 1700000000)
+            await add_sighting(conn, tab_id, device_id, 1700000000, tab_active=True)
+            await conn.commit()
+            cur = await conn.execute(
+                "SELECT tab_active FROM tab_sightings WHERE tab_id = ? AND device_id = ?",
+                (tab_id, device_id),
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == 1
+
+    async def test_duplicate_sighting_is_ignored(self, db_path: str) -> None:
+        # 同一(tab_id, device_id, seen_at)はUNIQUEなので二重記録されない
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            device_id = await upsert_device(conn, "S1", "M1", 1700000000)
+            tab_id = await upsert_tab(conn, "https://example.com/", "h1", "T", 1700000000)
+            await add_sighting(conn, tab_id, device_id, 1700000000, tab_active=True)
+            await add_sighting(conn, tab_id, device_id, 1700000000, tab_active=False)
+            await conn.commit()
+            cur = await conn.execute("SELECT COUNT(*) FROM tab_sightings")
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == 1
