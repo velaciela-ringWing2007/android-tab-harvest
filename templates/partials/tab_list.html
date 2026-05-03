@@ -1,0 +1,24 @@
+<section class="tab-list">
+  <div class="list-meta">{{ total }}件 (ページ {{ filters.page }} / {{ ((total + filters.per_page - 1) // filters.per_page) or 1 }})</div>
+
+  {% if not tabs %}
+    <p class="empty">該当するタブはありません。</p>
+  {% endif %}
+
+  {% for tab in tabs %}
+    {% include "partials/tab_row.html" %}
+  {% endfor %}
+
+  {% set pages = ((total + filters.per_page - 1) // filters.per_page) or 1 %}
+  {% if pages > 1 %}
+  <nav class="pager">
+    {% if filters.page > 1 %}
+      <a href="/{{ {'page': filters.page - 1, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">← 前</a>
+    {% endif %}
+    <span>{{ filters.page }} / {{ pages }}</span>
+    {% if filters.page < pages %}
+      <a href="/{{ {'page': filters.page + 1, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">次 →</a>
+    {% endif %}
+  </nav>
+  {% endif %}
+</section>

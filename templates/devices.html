@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}端末一覧 — android-tab-harvest{% endblock %}
+{% block content %}
+<section class="devices">
+  <h2>端末一覧</h2>
+  {% for d in devices %}
+    <div class="device-row">
+      <div class="device-info">
+        <strong>{{ d.nickname or d.model or d.serial }}</strong>
+        <small>serial: {{ d.serial }} / model: {{ d.model or '-' }}</small>
+      </div>
+      <form method="post" action="/devices/{{ d.id }}/nickname" class="device-form">
+        <input type="text" name="nickname" value="{{ d.nickname or '' }}" placeholder="ニックネーム">
+        <button type="submit">保存</button>
+      </form>
+    </div>
+  {% else %}
+    <p class="empty">まだ端末は登録されていません。<code>python collector.py</code> または「📱 収集」を実行してください。</p>
+  {% endfor %}
+</section>
+{% endblock %}

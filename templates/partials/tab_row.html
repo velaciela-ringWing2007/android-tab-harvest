@@ -1,0 +1,41 @@
+<article id="tab-{{ tab.id }}" class="tab-row status-{{ tab.status }}{% if not tab.still_open %} closed{% endif %}">
+  <div class="tab-main">
+    <a class="tab-title" href="{{ tab.url }}" target="_blank" rel="noopener noreferrer">
+      {{ tab.title or tab.url }}
+    </a>
+    <div class="tab-url">{{ tab.url }}</div>
+    <div class="tab-meta">
+      📱 {{ tab.devices|join(', ') if tab.devices else '不明' }}
+      · 初検出 {{ tab.first_seen|fmtdate }}
+      · {{ tab.sighting_count }}回検出
+      {% if tab.still_open %}<span class="open-mark">(開いてる)</span>{% else %}<span class="closed-mark">(閉じ済)</span>{% endif %}
+      {% if tab.note %}<span class="note">📝 {{ tab.note }}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="tab-actions">
+    {% set hx = 'hx-target="#tab-' ~ tab.id ~ '" hx-swap="outerHTML"' %}
+    <button type="button"
+            hx-post="/tabs/{{ tab.id }}/status"
+            hx-vals='{"status": "{% if tab.status == 'read' %}unread{% else %}read{% endif %}"}'
+            hx-target="#tab-{{ tab.id }}" hx-swap="outerHTML"
+            class="btn">
+      {% if tab.status == 'read' %}↩︎ 未読に戻す{% else %}✓ 既読{% endif %}
+    </button>
+    <button type="button"
+            hx-post="/tabs/{{ tab.id }}/status"
+            hx-vals='{"status": "later"}'
+            hx-target="#tab-{{ tab.id }}" hx-swap="outerHTML"
+            class="btn">📌 後で</button>
+    <button type="button"
+            hx-post="/tabs/{{ tab.id }}/status"
+            hx-vals='{"status": "archived"}'
+            hx-target="#tab-{{ tab.id }}" hx-swap="outerHTML"
+            class="btn">🗄️ 保管</button>
+    <button type="button"
+            hx-delete="/tabs/{{ tab.id }}"
+            hx-target="#tab-{{ tab.id }}" hx-swap="outerHTML"
+            hx-confirm="削除しますか？"
+            class="btn btn-danger">🗑️</button>
+  </div>
+</article>

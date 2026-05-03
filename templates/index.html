@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block content %}
+
+{# ---- フィルタバー ---- #}
+<section class="filters">
+  <div class="filter-row">
+    <span class="filter-label">端末:</span>
+    <a class="chip {% if not filters.device %}active{% endif %}" href="/{{ {'status': filters.status, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">全部</a>
+    {% for d in devices %}
+      <a class="chip {% if filters.device == d.id %}active{% endif %}"
+         href="/{{ {'device': d.id, 'status': filters.status, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">
+        {{ d.nickname or d.model or d.serial }}
+      </a>
+    {% endfor %}
+  </div>
+
+  <div class="filter-row">
+    <span class="filter-label">状態:</span>
+    <a class="chip {% if not filters.status %}active{% endif %}" href="/{{ {'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">全て</a>
+    {% for s, label in [('unread', '未読'), ('later', '後で読む'), ('read', '既読'), ('archived', 'アーカイブ')] %}
+      <a class="chip {% if filters.status == s %}active{% endif %}"
+         href="/{{ {'status': s, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">
+        {{ label }} {{ counts[s] }}
+      </a>
+    {% endfor %}
+  </div>
+
+  {% if all_tags %}
+  <div class="filter-row">
+    <span class="filter-label">タグ:</span>
+    <a class="chip {% if not filters.tag %}active{% endif %}" href="/{{ {'status': filters.status, 'device': filters.device, 'q': filters.q, 'sort': filters.sort}|querystring }}">all</a>
+    {% for t in all_tags %}
+      <a class="chip {% if filters.tag == t.name %}active{% endif %}"
+         href="/{{ {'tag': t.name, 'status': filters.status, 'device': filters.device, 'q': filters.q, 'sort': filters.sort}|querystring }}">
+        {{ t.name }}
+      </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <div class="filter-row">
+    <form method="get" action="/" class="search-form">
+      <input type="search" name="q" value="{{ filters.q or '' }}" placeholder="🔍 検索 (タイトル/URL/メモ)">
+      {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+      {% if filters.device %}<input type="hidden" name="device" value="{{ filters.device }}">{% endif %}
+      {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
+      {% if filters.sort %}<input type="hidden" name="sort" value="{{ filters.sort }}">{% endif %}
+      <button type="submit">検索</button>
+    </form>
+
+    <span class="sort">
+      ソート:
+      {% for sk, lbl in [('updated', '更新'), ('created', '初検出'), ('sightings', '検出回数')] %}
+        <a class="chip small {% if filters.sort == sk %}active{% endif %}"
+           href="/{{ {'sort': sk, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q}|querystring }}">{{ lbl }}</a>
+      {% endfor %}
+    </span>
+  </div>
+</section>
+
+{# ---- タブ一覧 ---- #}
+{% include "partials/tab_list.html" %}
+
+{% endblock %}
