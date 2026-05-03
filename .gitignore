@@ -20,3 +20,4 @@ rclone.conf
 # OS
 .DS_Store
 Thumbs.db
+CLAUDE.local.md
