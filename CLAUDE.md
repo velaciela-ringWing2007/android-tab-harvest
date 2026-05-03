@@ -40,3 +40,6 @@ python collector.py
 python server.py
 # → http://localhost:8765
 ```
+
+## コミットタイミング
+- 機能単位でこまめにコミット（動く状態でコミット、壊れた状態でコミットしない）
