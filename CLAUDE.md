@@ -23,6 +23,20 @@ android-tab-harvest: ADB経由でAndroid端末のChromeタブを吸い上げてW
 - collector.py は同期処理、server.py は async
 - エラーは握りつぶさず、graceful に処理してログ出力
 
+## 機密情報の扱い
+
+- 端末シリアル・APIキー・個別エンドポイントなどは `.env` に書く（gitignore対象）
+- 公開してよいテンプレは `.env.example` に置く
+- ソースコード・テスト・ドキュメントには実シリアルや実エンドポイントを直書きしない
+  （テスト用は `FAKE_SERIAL_001` のようなダミー値を使う）
+
+## セットアップ
+
+```bash
+cp .env.example .env
+# .env を編集して実値を入れる
+```
+
 ## テスト
 
 ```bash

@@ -34,7 +34,11 @@ Ubuntu24 (Ryzen7 9700X, 64GB RAM, RTX4070super)
 cd ~/Projects/android-tab-harvest
 python -m venv .venv
 source .venv/bin/activate
-pip install fastapi uvicorn jinja2 aiosqlite httpx python-multipart
+pip install -r requirements.txt
+
+# 環境変数（端末シリアル等）。.env は gitignore 対象
+cp .env.example .env
+# .env を編集して実値を入れる
 ```
 
 ## 使い方
