@@ -9,7 +9,28 @@ from pathlib import Path
 import aiosqlite
 import pytest
 
-from db import add_sighting, get_db, init_db, upsert_device, upsert_tab
+from db import (
+    add_sighting,
+    add_tab_tag,
+    count_tabs,
+    delete_device,
+    delete_tab,
+    get_db,
+    get_tab,
+    init_db,
+    list_devices,
+    list_devices_with_stats,
+    list_tab_tags,
+    list_tabs,
+    list_tags,
+    remove_tab_tag,
+    status_counts,
+    update_device_nickname,
+    update_tab_note,
+    update_tab_status,
+    upsert_device,
+    upsert_tab,
+)
 
 
 @pytest.fixture
@@ -296,3 +317,262 @@ class TestAddSighting:
             row = await cur.fetchone()
         assert row is not None
         assert row[0] == 1
+
+
+async def _seed(db_path: str) -> dict[str, int]:
+    """テスト用に最小のデバイス2台・タブ3つ・sighting・タグを仕込む。"""
+    await init_db(db_path)
+    ids: dict[str, int] = {}
+    async with get_db(db_path) as conn:
+        d1 = await upsert_device(conn, "DEV_A", "Pixel A", 1700000000)
+        d2 = await upsert_device(conn, "DEV_B", "Pixel B", 1700000000)
+        ids["d1"], ids["d2"] = d1, d2
+
+        t1 = await upsert_tab(conn, "https://a.example/x", "h_a", "Article A", 1700000100)
+        t2 = await upsert_tab(conn, "https://b.example/y", "h_b", "Article B", 1700000200)
+        t3 = await upsert_tab(conn, "https://c.example/z", "h_c", "Searchable Note", 1700000300)
+        ids["t1"], ids["t2"], ids["t3"] = t1, t2, t3
+
+        # sightings: t1=DEV_A, t2=DEV_A+DEV_B, t3=DEV_B
+        await add_sighting(conn, t1, d1, 1700000100, tab_active=True)
+        await add_sighting(conn, t2, d1, 1700000200, tab_active=True)
+        await add_sighting(conn, t2, d2, 1700000201, tab_active=False)  # 最新がfalse=閉じ済
+        await add_sighting(conn, t3, d2, 1700000300, tab_active=True)
+
+        # t2 にタグ
+        await add_tab_tag(conn, t2, "tech")
+        await conn.commit()
+    return ids
+
+
+class TestListTabs:
+    async def test_returns_all_when_no_filter(self, db_path: str) -> None:
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn)
+        assert len(tabs) == 3
+
+    async def test_filters_by_status(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        now = 1700000999
+        async with get_db(db_path) as conn:
+            await update_tab_status(conn, ids["t1"], "read", now)
+            await conn.commit()
+            tabs = await list_tabs(conn, status="unread")
+        assert {t.id for t in tabs} == {ids["t2"], ids["t3"]}
+
+    async def test_filters_by_device(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, device_id=ids["d1"])
+        assert {t.id for t in tabs} == {ids["t1"], ids["t2"]}
+
+    async def test_filters_by_tag(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, tag="tech")
+        assert {t.id for t in tabs} == {ids["t2"]}
+
+    async def test_q_matches_title_or_note(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, q="Searchable")
+        assert {t.id for t in tabs} == {ids["t3"]}
+
+    async def test_q_matches_url(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, q="b.example")
+        assert {t.id for t in tabs} == {ids["t2"]}
+
+    async def test_sort_updated_desc(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, sort="updated")
+        assert [t.id for t in tabs] == [ids["t3"], ids["t2"], ids["t1"]]
+
+    async def test_pagination(self, db_path: str) -> None:
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            page1 = await list_tabs(conn, per_page=2, page=1)
+            page2 = await list_tabs(conn, per_page=2, page=2)
+        assert len(page1) == 2
+        assert len(page2) == 1
+        assert {t.id for t in page1}.isdisjoint({t.id for t in page2})
+
+    async def test_returns_devices_and_sighting_count(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn)
+            t2 = next(t for t in tabs if t.id == ids["t2"])
+        # t2 は DEV_A, DEV_B 両方で検出
+        assert sorted(t2.devices) == ["Pixel A", "Pixel B"]
+        assert t2.sighting_count == 2
+
+    async def test_still_open_reflects_latest_sighting(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn)
+            t1 = next(t for t in tabs if t.id == ids["t1"])
+            t2 = next(t for t in tabs if t.id == ids["t2"])
+        assert t1.still_open is True
+        assert t2.still_open is False  # 最新が active=False
+
+
+class TestCountAndStatusCounts:
+    async def test_count_with_filter(self, db_path: str) -> None:
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            assert await count_tabs(conn) == 3
+            assert await count_tabs(conn, tag="tech") == 1
+
+    async def test_status_counts(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await update_tab_status(conn, ids["t1"], "read", 1700001000)
+            await update_tab_status(conn, ids["t3"], "later", 1700001000)
+            await conn.commit()
+            counts = await status_counts(conn)
+        assert counts == {"unread": 1, "read": 1, "later": 1, "archived": 0}
+
+
+class TestUpdateAndDelete:
+    async def test_update_status(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await update_tab_status(conn, ids["t1"], "archived", 1700001000)
+            await conn.commit()
+            tab = await get_tab(conn, ids["t1"])
+        assert tab is not None
+        assert tab.status == "archived"
+        assert tab.updated_at == 1700001000
+
+    async def test_update_note(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await update_tab_note(conn, ids["t1"], "あとで読む", 1700001000)
+            await conn.commit()
+            tab = await get_tab(conn, ids["t1"])
+        assert tab is not None
+        assert tab.note == "あとで読む"
+
+    async def test_update_note_empty_becomes_null(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await update_tab_note(conn, ids["t1"], "memo", 1700001000)
+            await update_tab_note(conn, ids["t1"], "", 1700001001)
+            await conn.commit()
+            tab = await get_tab(conn, ids["t1"])
+        assert tab is not None
+        assert tab.note is None
+
+    async def test_delete_tab_cascades_sightings(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await delete_tab(conn, ids["t2"])
+            await conn.commit()
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM tab_sightings WHERE tab_id = ?", (ids["t2"],)
+            )
+            row = await cur.fetchone()
+        assert row is not None
+        assert row[0] == 0
+
+
+class TestTags:
+    async def test_add_creates_tag(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tag_id = await add_tab_tag(conn, ids["t1"], "newtag")
+            await conn.commit()
+            tags = await list_tab_tags(conn, ids["t1"])
+        assert any(t.id == tag_id and t.name == "newtag" for t in tags)
+
+    async def test_add_reuses_existing_tag(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            id1 = await add_tab_tag(conn, ids["t1"], "shared")
+            id2 = await add_tab_tag(conn, ids["t2"], "shared")
+            await conn.commit()
+        assert id1 == id2
+
+    async def test_remove_tag(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tag_id = await add_tab_tag(conn, ids["t1"], "removeme")
+            await conn.commit()
+            await remove_tab_tag(conn, ids["t1"], tag_id)
+            await conn.commit()
+            tags = await list_tab_tags(conn, ids["t1"])
+        assert all(t.id != tag_id for t in tags)
+
+    async def test_list_all_tags(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await add_tab_tag(conn, ids["t1"], "alpha")
+            await add_tab_tag(conn, ids["t3"], "beta")
+            await conn.commit()
+            all_tags = await list_tags(conn)
+        names = {t.name for t in all_tags}
+        assert {"tech", "alpha", "beta"} <= names
+
+    async def test_empty_tag_name_rejected(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            with pytest.raises(ValueError):
+                await add_tab_tag(conn, ids["t1"], "   ")
+
+
+class TestDevices:
+    async def test_list_devices(self, db_path: str) -> None:
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            devices = await list_devices(conn)
+        assert {d.serial for d in devices} == {"DEV_A", "DEV_B"}
+
+    async def test_update_nickname(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await update_device_nickname(conn, ids["d1"], "メイン端末")
+            await conn.commit()
+            devices = await list_devices(conn)
+            d1 = next(d for d in devices if d.id == ids["d1"])
+        assert d1.nickname == "メイン端末"
+
+    async def test_update_nickname_empty_becomes_null(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await update_device_nickname(conn, ids["d1"], "")
+            await conn.commit()
+            devices = await list_devices(conn)
+            d1 = next(d for d in devices if d.id == ids["d1"])
+        assert d1.nickname is None
+
+    async def test_list_devices_with_stats(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            stats = await list_devices_with_stats(conn)
+        d1 = next(s for s in stats if s.id == ids["d1"])
+        d2 = next(s for s in stats if s.id == ids["d2"])
+        # d1 は t1, t2 の2タブ
+        assert d1.tab_count == 2
+        assert d1.sighting_count == 2
+        assert d1.first_seen == 1700000100
+        assert d1.last_seen == 1700000200
+        # d2 は t2, t3 の2タブ
+        assert d2.tab_count == 2
+
+    async def test_delete_device_removes_sightings_keeps_tabs(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await delete_device(conn, ids["d1"])
+            await conn.commit()
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM tab_sightings WHERE device_id = ?", (ids["d1"],)
+            )
+            assert (await cur.fetchone())[0] == 0
+            cur = await conn.execute("SELECT COUNT(*) FROM devices WHERE id = ?", (ids["d1"],))
+            assert (await cur.fetchone())[0] == 0
+            # タブは残る
+            cur = await conn.execute("SELECT COUNT(*) FROM tabs")
+            assert (await cur.fetchone())[0] == 3

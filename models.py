@@ -52,3 +52,18 @@ class TabSighting:
 class Tag:
     name: str
     id: int | None = None
+
+
+@dataclass
+class DeviceWithStats:
+    """端末ページ用：基本情報 + sighting 集計値。"""
+
+    id: int
+    serial: str
+    nickname: str | None
+    model: str | None
+    added_at: int
+    tab_count: int
+    sighting_count: int
+    last_seen: int | None
+    first_seen: int | None

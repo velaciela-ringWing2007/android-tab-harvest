@@ -1,16 +1,20 @@
-"""SQLite初期化とコネクション管理。
+"""SQLite初期化とコネクション管理。クエリヘルパもここに集約。
 
-スキーマは SPEC.md セクション1 を参照。
+スキーマは SPEC.md セクション1、フィルタ仕様は SPEC.md セクション4 を参照。
 """
 
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
+from typing import AsyncIterator, Literal
 
 import aiosqlite
 
+from models import Device, DeviceWithStats, Tab, TabStatus, Tag
+
 DEFAULT_DB_PATH = "tabs.db"
+
+SortKey = Literal["updated", "created", "sightings"]
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS devices (
@@ -132,4 +136,256 @@ async def add_sighting(
         "INSERT OR IGNORE INTO tab_sightings (tab_id, device_id, seen_at, tab_active) "
         "VALUES (?, ?, ?, ?)",
         (tab_id, device_id, seen_at, 1 if tab_active else 0),
+    )
+
+
+# ---- Web UI 用クエリヘルパ ----
+
+
+def _row_to_tab(row: aiosqlite.Row | tuple) -> Tab:
+    """list_tabs / get_tab で組み立てた行を Tab dataclass に詰める。"""
+    devices_raw: str | None = row[10]
+    devices_list = [d for d in (devices_raw.split("\x1f") if devices_raw else []) if d]
+    return Tab(
+        id=row[0],
+        url=row[1],
+        url_hash=row[2],
+        title=row[3],
+        status=row[4],
+        note=row[5],
+        summary=row[6],
+        summarized_at=row[7],
+        created_at=row[8],
+        updated_at=row[9],
+        devices=devices_list,
+        sighting_count=row[11] or 0,
+        first_seen=row[12],
+        still_open=bool(row[13]) if row[13] is not None else False,
+    )
+
+
+_BASE_SELECT = """
+SELECT
+  t.id, t.url, t.url_hash, t.title, t.status, t.note,
+  t.summary, t.summarized_at, t.created_at, t.updated_at,
+  (SELECT GROUP_CONCAT(name, CHAR(31)) FROM (
+     SELECT DISTINCT COALESCE(d.nickname, d.model, d.serial) AS name
+     FROM tab_sightings s JOIN devices d ON d.id = s.device_id
+     WHERE s.tab_id = t.id
+   )) AS devices,
+  (SELECT COUNT(*) FROM tab_sightings s WHERE s.tab_id = t.id) AS sighting_count,
+  (SELECT MIN(s.seen_at) FROM tab_sightings s WHERE s.tab_id = t.id) AS first_seen,
+  (SELECT s.tab_active FROM tab_sightings s WHERE s.tab_id = t.id
+     ORDER BY s.seen_at DESC LIMIT 1) AS still_open
+FROM tabs t
+"""
+
+
+def _build_filter(
+    status: str | None,
+    device_id: int | None,
+    tag: str | None,
+    q: str | None,
+) -> tuple[str, list[object]]:
+    """WHERE句と引数リストを組み立てる（先頭に WHERE は付けない）。"""
+    clauses: list[str] = []
+    params: list[object] = []
+
+    if status:
+        clauses.append("t.status = ?")
+        params.append(status)
+    if device_id is not None:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM tab_sightings s WHERE s.tab_id = t.id AND s.device_id = ?)"
+        )
+        params.append(device_id)
+    if tag:
+        clauses.append(
+            "EXISTS (SELECT 1 FROM tab_tags tt JOIN tags g ON tt.tag_id = g.id "
+            "WHERE tt.tab_id = t.id AND g.name = ?)"
+        )
+        params.append(tag)
+    if q:
+        clauses.append(
+            "(COALESCE(t.title,'') LIKE ? OR t.url LIKE ? OR COALESCE(t.note,'') LIKE ?)"
+        )
+        like = f"%{q}%"
+        params.extend([like, like, like])
+
+    return (" AND ".join(clauses), params)
+
+
+_SORT_SQL: dict[str, str] = {
+    "updated": "t.updated_at DESC, t.id DESC",
+    "created": "t.created_at DESC, t.id DESC",
+    "sightings": "sighting_count DESC, t.updated_at DESC, t.id DESC",
+}
+
+
+async def list_tabs(
+    conn: aiosqlite.Connection,
+    *,
+    status: str | None = None,
+    device_id: int | None = None,
+    tag: str | None = None,
+    q: str | None = None,
+    sort: SortKey = "updated",
+    page: int = 1,
+    per_page: int = 50,
+) -> list[Tab]:
+    where_sql, params = _build_filter(status, device_id, tag, q)
+    sql = _BASE_SELECT
+    if where_sql:
+        sql += f" WHERE {where_sql}"
+    sql += f" ORDER BY {_SORT_SQL.get(sort, _SORT_SQL['updated'])}"
+    sql += " LIMIT ? OFFSET ?"
+    params = [*params, per_page, max(0, (page - 1) * per_page)]
+
+    cur = await conn.execute(sql, params)
+    rows = await cur.fetchall()
+    return [_row_to_tab(r) for r in rows]
+
+
+async def count_tabs(
+    conn: aiosqlite.Connection,
+    *,
+    status: str | None = None,
+    device_id: int | None = None,
+    tag: str | None = None,
+    q: str | None = None,
+) -> int:
+    where_sql, params = _build_filter(status, device_id, tag, q)
+    sql = "SELECT COUNT(*) FROM tabs t"
+    if where_sql:
+        sql += f" WHERE {where_sql}"
+    cur = await conn.execute(sql, params)
+    row = await cur.fetchone()
+    return int(row[0]) if row else 0
+
+
+async def status_counts(conn: aiosqlite.Connection) -> dict[str, int]:
+    """ステータスごとの件数。フィルタバーの数字表示用。"""
+    cur = await conn.execute("SELECT status, COUNT(*) FROM tabs GROUP BY status")
+    rows = await cur.fetchall()
+    counts = {status: 0 for status in ("unread", "read", "later", "archived")}
+    for status, count in rows:
+        counts[status] = count
+    return counts
+
+
+async def get_tab(conn: aiosqlite.Connection, tab_id: int) -> Tab | None:
+    cur = await conn.execute(_BASE_SELECT + " WHERE t.id = ?", (tab_id,))
+    row = await cur.fetchone()
+    return _row_to_tab(row) if row else None
+
+
+async def update_tab_status(
+    conn: aiosqlite.Connection, tab_id: int, status: TabStatus, now: int
+) -> None:
+    await conn.execute(
+        "UPDATE tabs SET status = ?, updated_at = ? WHERE id = ?",
+        (status, now, tab_id),
+    )
+
+
+async def update_tab_note(
+    conn: aiosqlite.Connection, tab_id: int, note: str | None, now: int
+) -> None:
+    await conn.execute(
+        "UPDATE tabs SET note = ?, updated_at = ? WHERE id = ?",
+        (note or None, now, tab_id),
+    )
+
+
+async def delete_tab(conn: aiosqlite.Connection, tab_id: int) -> None:
+    await conn.execute("DELETE FROM tabs WHERE id = ?", (tab_id,))
+
+
+async def list_devices(conn: aiosqlite.Connection) -> list[Device]:
+    cur = await conn.execute(
+        "SELECT id, serial, nickname, model, added_at FROM devices ORDER BY id"
+    )
+    rows = await cur.fetchall()
+    return [
+        Device(id=r[0], serial=r[1], nickname=r[2], model=r[3], added_at=r[4])
+        for r in rows
+    ]
+
+
+async def update_device_nickname(
+    conn: aiosqlite.Connection, device_id: int, nickname: str | None
+) -> None:
+    await conn.execute(
+        "UPDATE devices SET nickname = ? WHERE id = ?", (nickname or None, device_id)
+    )
+
+
+async def list_devices_with_stats(
+    conn: aiosqlite.Connection,
+) -> list[DeviceWithStats]:
+    cur = await conn.execute(
+        """
+        SELECT
+          d.id, d.serial, d.nickname, d.model, d.added_at,
+          COUNT(DISTINCT s.tab_id) AS tab_count,
+          COUNT(s.id) AS sighting_count,
+          MAX(s.seen_at) AS last_seen,
+          MIN(s.seen_at) AS first_seen
+        FROM devices d
+        LEFT JOIN tab_sightings s ON s.device_id = d.id
+        GROUP BY d.id
+        ORDER BY d.id
+        """
+    )
+    rows = await cur.fetchall()
+    return [DeviceWithStats(*r) for r in rows]
+
+
+async def delete_device(conn: aiosqlite.Connection, device_id: int) -> None:
+    """端末と関連する sighting を削除。孤立した tab はそのまま残す。"""
+    await conn.execute(
+        "DELETE FROM tab_sightings WHERE device_id = ?", (device_id,)
+    )
+    await conn.execute("DELETE FROM devices WHERE id = ?", (device_id,))
+
+
+async def list_tags(conn: aiosqlite.Connection) -> list[Tag]:
+    cur = await conn.execute("SELECT id, name FROM tags ORDER BY name")
+    rows = await cur.fetchall()
+    return [Tag(id=r[0], name=r[1]) for r in rows]
+
+
+async def list_tab_tags(conn: aiosqlite.Connection, tab_id: int) -> list[Tag]:
+    cur = await conn.execute(
+        "SELECT g.id, g.name FROM tags g JOIN tab_tags tt ON tt.tag_id = g.id "
+        "WHERE tt.tab_id = ? ORDER BY g.name",
+        (tab_id,),
+    )
+    rows = await cur.fetchall()
+    return [Tag(id=r[0], name=r[1]) for r in rows]
+
+
+async def add_tab_tag(
+    conn: aiosqlite.Connection, tab_id: int, tag_name: str
+) -> int:
+    """タグが無ければ作成し、tab_tags に紐付け。tag_id を返す。"""
+    name = tag_name.strip()
+    if not name:
+        raise ValueError("tag name is empty")
+    await conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (name,))
+    cur = await conn.execute("SELECT id FROM tags WHERE name = ?", (name,))
+    row = await cur.fetchone()
+    assert row is not None
+    tag_id = int(row[0])
+    await conn.execute(
+        "INSERT OR IGNORE INTO tab_tags (tab_id, tag_id) VALUES (?, ?)", (tab_id, tag_id)
+    )
+    return tag_id
+
+
+async def remove_tab_tag(
+    conn: aiosqlite.Connection, tab_id: int, tag_id: int
+) -> None:
+    await conn.execute(
+        "DELETE FROM tab_tags WHERE tab_id = ? AND tag_id = ?", (tab_id, tag_id)
     )

@@ -4,15 +4,31 @@
 <section class="devices">
   <h2>端末一覧</h2>
   {% for d in devices %}
-    <div class="device-row">
+    <div id="device-{{ d.id }}" class="device-row">
       <div class="device-info">
         <strong>{{ d.nickname or d.model or d.serial }}</strong>
-        <small>serial: {{ d.serial }} / model: {{ d.model or '-' }}</small>
+        <small>serial: <code>{{ d.serial }}</code> / model: {{ d.model or '-' }} / 追加: {{ d.added_at|fmtdate }}</small>
+        <div class="device-stats">
+          <span>タブ <strong>{{ d.tab_count }}</strong></span>
+          <span>検出回数 <strong>{{ d.sighting_count }}</strong></span>
+          <span>初検出 <strong>{{ d.first_seen|fmtdate }}</strong></span>
+          <span>最終検出 <strong>{{ d.last_seen|fmtdate }}</strong></span>
+        </div>
       </div>
-      <form method="post" action="/devices/{{ d.id }}/nickname" class="device-form">
-        <input type="text" name="nickname" value="{{ d.nickname or '' }}" placeholder="ニックネーム">
-        <button type="submit">保存</button>
-      </form>
+      <div class="device-form">
+        <form method="post" action="/devices/{{ d.id }}/nickname" class="device-form">
+          <input type="text" name="nickname" value="{{ d.nickname or '' }}" placeholder="ニックネーム">
+          <button type="submit">保存</button>
+        </form>
+        <button type="button"
+                class="btn-danger"
+                hx-delete="/devices/{{ d.id }}"
+                hx-target="#device-{{ d.id }}"
+                hx-swap="outerHTML"
+                hx-confirm="「{{ d.nickname or d.model or d.serial }}」と関連する検出履歴 {{ d.sighting_count }}件 を削除します。タブ自体は残ります。よろしいですか？">
+          🗑️ 削除
+        </button>
+      </div>
     </div>
   {% else %}
     <p class="empty">まだ端末は登録されていません。<code>python collector.py</code> または「📱 収集」を実行してください。</p>

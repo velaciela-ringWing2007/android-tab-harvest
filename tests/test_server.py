@@ -171,6 +171,23 @@ class TestDevices:
             devices = await list_devices(conn)
         assert any(d.id == 1 and d.nickname == "メイン" for d in devices)
 
+    async def test_devices_page_shows_stats(self, client: AsyncClient) -> None:
+        r = await client.get("/devices")
+        assert r.status_code == 200
+        assert "タブ" in r.text
+        assert "検出回数" in r.text
+
+    async def test_delete_device(self, client: AsyncClient) -> None:
+        r = await client.delete("/devices/1")
+        assert r.status_code == 200
+        async with get_db(server.DB_PATH) as conn:
+            devices = await list_devices(conn)
+        assert all(d.id != 1 for d in devices)
+        async with get_db(server.DB_PATH) as conn:
+            cur = await conn.execute("SELECT COUNT(*) FROM tabs")
+            count = (await cur.fetchone())[0]
+        assert count == 3
+
 
 class TestNotFound:
     async def test_status_on_missing_tab(self, client: AsyncClient) -> None:

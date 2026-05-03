@@ -218,7 +218,7 @@ async def remove_tag(request: Request, tab_id: int, tag_id: int):
 @app.get("/devices", response_class=HTMLResponse)
 async def devices_view(request: Request):
     async with get_db(DB_PATH) as conn:
-        devices = await db.list_devices(conn)
+        devices = await db.list_devices_with_stats(conn)
     return templates.TemplateResponse(request, "devices.html", {"devices": devices})
 
 
@@ -228,6 +228,15 @@ async def update_nickname(device_id: int, nickname: str = Form("")):
         await db.update_device_nickname(conn, device_id, nickname)
         await conn.commit()
     return RedirectResponse("/devices", status_code=303)
+
+
+@app.delete("/devices/{device_id}")
+async def delete_device(device_id: int):
+    async with get_db(DB_PATH) as conn:
+        await db.delete_device(conn, device_id)
+        await conn.commit()
+    # HTMX hx-swap=outerHTML + 空レスポンスで該当行を消す
+    return Response(status_code=200, content="")
 
 
 # ---- 収集 ----
