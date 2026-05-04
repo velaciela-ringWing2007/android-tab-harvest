@@ -95,6 +95,9 @@
           <a href="/{{ {'domain': rest, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
              class="sidebar-item selected"
              title="クリックで「{{ host }}」を解除">
+            <img class="favicon" loading="lazy" alt=""
+                 src="https://www.google.com/s2/favicons?domain={{ host }}&sz=32"
+                 onerror="this.style.display='none'">
             <span class="name">{{ host }}</span>
             <span class="remove-x" aria-hidden="true">×</span>
           </a>
@@ -104,6 +107,9 @@
           <a href="/{{ {'domain': new_list, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
              class="sidebar-item"
              title="クリックで「{{ host }}」を追加">
+            <img class="favicon" loading="lazy" alt=""
+                 src="https://www.google.com/s2/favicons?domain={{ host }}&sz=32"
+                 onerror="this.style.display='none'">
             <span class="name">{{ host }}</span>
             <span class="count">{{ n }}</span>
           </a>

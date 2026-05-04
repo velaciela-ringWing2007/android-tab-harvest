@@ -2,6 +2,9 @@
   <input type="checkbox" name="tab_ids" value="{{ tab.id }}" class="row-check" aria-label="select tab {{ tab.id }}">
   <div class="tab-main">
     <a class="tab-title" href="{{ tab.url }}" target="_blank" rel="noopener noreferrer">
+      {% if tab.host %}<img class="favicon" loading="lazy" alt=""
+           src="https://www.google.com/s2/favicons?domain={{ tab.host }}&sz=32"
+           onerror="this.style.display='none'">{% endif %}
       {{ tab.title or tab.url }}
     </a>
     <div class="tab-url">{{ tab.url }}</div>
