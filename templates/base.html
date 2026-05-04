@@ -22,9 +22,16 @@
     <nav>
       <button type="button" class="btn-icon" id="view-toggle" title="表示切替">⊞</button>
       <button type="button" class="btn-icon" id="theme-toggle" title="テーマ切替">🌗</button>
-      <form method="post" action="/collect" class="inline">
-        <button type="submit" class="btn-primary">📱 収集</button>
-      </form>
+      <button type="button" class="btn-primary"
+              hx-post="/collect"
+              hx-target="#collect-dialog"
+              hx-swap="innerHTML"
+              hx-disabled-elt="this"
+              hx-indicator="#collect-spinner"
+              title="ADB経由でChromeタブを収集">
+        📱 収集
+        <span id="collect-spinner" class="spinner htmx-indicator" aria-hidden="true"></span>
+      </button>
       <form method="post" action="/summarize" class="inline">
         <input type="hidden" name="max" value="10">
         <button type="submit" class="btn-link" title="未要約タブを最大10件 LM Studio で要約">✨ 要約バッチ</button>
@@ -76,6 +83,8 @@
   {% if msg %}
   <div class="flash">{{ msg }}</div>
   {% endif %}
+
+  <dialog id="collect-dialog" class="result-dialog"></dialog>
 
   <main class="{% if all_domains %}with-sidebar{% endif %}">
     {% if all_domains %}

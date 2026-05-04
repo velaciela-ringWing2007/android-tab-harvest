@@ -322,8 +322,15 @@ async def delete_device(device_id: int):
 
 
 @app.post("/collect")
-async def trigger_collect():
+async def trigger_collect(request: Request):
+    """ADB収集を実行。HTMX呼び出しなら結果ダイアログのHTMLを返し、
+    通常POSTなら msg 付きでリダイレクト（CLI/curl 互換のため）。
+    """
     report = await collect_async(DB_PATH)
+    if request.headers.get("HX-Request") == "true":
+        return templates.TemplateResponse(
+            request, "partials/collect_result.html", {"report": report}
+        )
     msg = (
         f"処理 {report.devices_processed}台 / 検出 {report.tabs_collected}件 "
         f"(新規 {report.tabs_new}件)"

@@ -287,6 +287,42 @@ class TestBulkAction:
         assert r.status_code == 400
 
 
+class TestCollect:
+    async def test_htmx_returns_dialog_html(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from collector import CollectorReport
+        import server as srv
+
+        async def fake_collect(db_path: str) -> CollectorReport:
+            return CollectorReport(
+                devices_processed=1, tabs_collected=10, tabs_new=3, errors=["x"]
+            )
+
+        monkeypatch.setattr(srv, "collect_async", fake_collect)
+        r = await client.post("/collect", headers={"HX-Request": "true"})
+        assert r.status_code == 200
+        # ダイアログ用 partial が返る
+        assert "収集完了" in r.text
+        assert "新規追加" in r.text
+        assert "showModal" in r.text  # 自動 open スクリプト
+        assert "エラー詳細" in r.text  # エラーがあるときだけ
+
+    async def test_non_htmx_redirects_with_msg(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from collector import CollectorReport
+        import server as srv
+
+        async def fake_collect(db_path: str) -> CollectorReport:
+            return CollectorReport(devices_processed=1, tabs_collected=5, tabs_new=2)
+
+        monkeypatch.setattr(srv, "collect_async", fake_collect)
+        r = await client.post("/collect", follow_redirects=False)
+        assert r.status_code == 303
+        assert "msg=" in r.headers["location"]
+
+
 class TestSortOrder:
     async def test_default_is_desc(self, client: AsyncClient) -> None:
         r = await client.get("/", params={"sort": "updated"})

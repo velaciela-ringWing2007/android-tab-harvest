@@ -1,0 +1,26 @@
+<div class="dialog-content">
+  <h3>📱 収集完了</h3>
+  <table class="result-table">
+    <tr><th>処理した端末</th><td><strong>{{ report.devices_processed }}</strong> 台</td></tr>
+    <tr><th>検出したタブ</th><td><strong>{{ report.tabs_collected }}</strong> 件</td></tr>
+    <tr><th>新規追加</th><td><strong class="num-new">{{ report.tabs_new }}</strong> 件</td></tr>
+    <tr><th>既存スキップ</th><td><strong class="num-skip">{{ report.tabs_collected - report.tabs_new }}</strong> 件</td></tr>
+    {% if report.errors %}
+    <tr><th>エラー</th><td><strong class="num-err">{{ report.errors|length }}</strong> 件</td></tr>
+    {% endif %}
+  </table>
+
+  {% if report.errors %}
+  <details class="result-errors">
+    <summary>エラー詳細</summary>
+    <ul>{% for e in report.errors %}<li>{{ e }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+
+  <div class="dialog-actions">
+    <button type="button" onclick="document.getElementById('collect-dialog').close()">閉じる</button>
+    <button type="button" class="btn-primary"
+            onclick="document.getElementById('collect-dialog').close(); location.reload()">一覧を更新</button>
+  </div>
+</div>
+<script>document.getElementById('collect-dialog').showModal();</script>
