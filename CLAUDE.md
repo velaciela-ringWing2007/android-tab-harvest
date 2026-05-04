@@ -53,7 +53,17 @@ python collector.py
 # Web UI
 python server.py
 # → http://localhost:8765
+
+# 要約（LM Studio が起動済みの前提、URLは .env の LM_STUDIO_URL）
+python summarizer.py --max 10        # 未要約を最大10件
+python summarizer.py --tab 42        # 個別tab_id
 ```
+
+## 実装メモ
+
+- collector.py / summarizer.py は同期処理が中心、DBアクセス層 (aiosqlite) のため最上位だけ async
+- summarizer のテストは LM Studio に接続せず monkeypatch で fetch_body / call_llm を差し替える
+- HTTP fetch / LLM 呼び出しは例外で落とさず graceful に SummaryResult.error / is_dead に詰める
 
 ## コミットタイミング
 - 機能単位でこまめにコミット（動く状態でコミット、壊れた状態でコミットしない）

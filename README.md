@@ -14,8 +14,8 @@ PCの大画面で未読記事を消化するためのツール。
 Ubuntu24 (Ryzen7 9700X, 64GB RAM, RTX4070super)
 ├── collector.py         # ADB → Chrome DevTools → SQLite に収集
 ├── server.py            # FastAPI + Jinja2 + HTMX で閲覧UI
+├── summarizer.py        # LM Studio + trafilatura で本文要約 + タグ自動提案
 ├── tabs.db              # SQLite
-├── summarizer.py        # (将来) LM Studio連携で記事要約
 └── sync.sh              # (将来) rclone でGoogle Driveにバックアップ
 ```
 
@@ -51,6 +51,51 @@ python collector.py
 python server.py
 # → http://localhost:8765
 ```
+
+## 記事要約（LM Studio）
+
+`summarizer.py` は LM Studio の OpenAI 互換 API に「3行要約 + タグ提案最大3」を依頼し、
+`tabs.summary` と `tab_tags` を更新する。本文取得は trafilatura（広告/ナビを除いた記事本文）。
+
+### LM Studio 側のセットアップ
+
+1. 任意のモデルをロード（軽さ重視なら `gemma-4-e4b`、品質重視なら `qwen3.5-9b` 等）
+2. 左メニュー **Developer** タブ → **Local Server** → **Status: Running** にする
+3. ポートはデフォルト **1234**。別マシンから叩くなら **Serve on Local Network** を ON
+
+### .env
+
+```bash
+# 同一マシンの場合（デフォルト）
+LM_STUDIO_URL=http://localhost:1234/v1/chat/completions
+
+# 別マシンから叩く場合の例
+# LM_STUDIO_URL=http://192.168.1.10:1234/v1/chat/completions
+```
+
+### CLI
+
+```bash
+# 未要約タブを最大10件まとめて要約（既に summary がある行はスキップ）
+python summarizer.py --max 10
+
+# 特定タブだけ要約
+python summarizer.py --tab 42
+```
+
+### Web UI から
+
+- 各タブ行右の **✨ 要約** ボタン → 1件処理、結果は HTMX で行に差し替え
+- ヘッダの **✨ 要約バッチ** → 未要約を最大10件、結果メッセージ付きで戻る
+
+### 自動タグ
+
+| 状況 | 付与されるタグ |
+|------|---------------|
+| HTTP 404 | `404` + `dead-link` |
+| その他のエラー (4xx/5xx/タイムアウト) | `dead-link` |
+| 本文抽出失敗（SPA等） | `empty` |
+| 正常 | LLM 提案タグを最大3個（既存は重複スキップ） |
 
 ## 定期実行のセットアップ
 
@@ -110,6 +155,5 @@ journalctl --user -u tab-harvest.service -n 50
 
 ## 将来の拡張
 
-- LM Studio (localhost:1234) 連携で記事要約
-- rclone でGoogle Driveにtabs.dbバックアップ
+- rclone で Google Drive に tabs.db バックアップ
 - PWA化でスマホからも閲覧

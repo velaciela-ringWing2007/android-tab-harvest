@@ -21,6 +21,7 @@ from fastapi.templating import Jinja2Templates
 import db
 from collector import collect_async
 from db import DEFAULT_DB_PATH, get_db, init_db
+from summarizer import summarize_pending, summarize_tab
 
 log = logging.getLogger(__name__)
 
@@ -329,6 +330,32 @@ async def trigger_collect():
     )
     if report.errors:
         msg += f" / エラー {len(report.errors)}件"
+    return RedirectResponse(f"/?msg={msg}", status_code=303)
+
+
+# ---- 要約 ----
+
+
+@app.post("/tabs/{tab_id}/summarize", response_class=HTMLResponse)
+async def summarize_one(request: Request, tab_id: int):
+    """1タブを LM Studio で要約してタブ行を差し替えで返す。"""
+    try:
+        await summarize_tab(DB_PATH, tab_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="tab not found")
+    return await _render_tab_row(request, tab_id)
+
+
+@app.post("/summarize")
+async def summarize_batch(max: int = Form(10)):
+    """未要約タブを最大 N 件まとめて要約。完了後にメッセージ付きでindexへ。"""
+    results = await summarize_pending(DB_PATH, max_count=max)
+    n_dead = sum(1 for _, r in results if r.is_dead)
+    n_err = sum(1 for _, r in results if r.error)
+    n_ok = len(results) - n_dead - n_err
+    msg = (
+        f"要約: 成功 {n_ok}件 / dead-link {n_dead}件 / エラー {n_err}件"
+    )
     return RedirectResponse(f"/?msg={msg}", status_code=303)
 
 

@@ -337,6 +337,20 @@ main.with-sidebar > .content { min-width: 0; }
 .open-mark { color: var(--open); }
 .closed-mark { color: var(--closed); }
 .note { background: var(--note-bg); color: var(--fg); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
+.tab-summary {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: var(--accent-bg);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  color: var(--fg);
+}
+/* HTMX indicator: 通信中だけ表示 */
+.htmx-indicator { display: none; margin-left: 6px; font-size: 16px; }
+.htmx-request .htmx-indicator { display: inline; }
+.htmx-request.htmx-indicator { display: inline; }
 .tab-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 
 /* ---- タグchip ---- */

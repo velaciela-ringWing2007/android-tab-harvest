@@ -25,6 +25,10 @@
       <form method="post" action="/collect" class="inline">
         <button type="submit" class="btn-primary">📱 収集</button>
       </form>
+      <form method="post" action="/summarize" class="inline">
+        <input type="hidden" name="max" value="10">
+        <button type="submit" class="btn-link" title="未要約タブを最大10件 LM Studio で要約">✨ 要約バッチ</button>
+      </form>
       <a href="/devices" class="btn-link">⚙️ 端末</a>
     </nav>
   </header>
