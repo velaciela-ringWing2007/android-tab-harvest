@@ -52,6 +52,62 @@ python server.py
 # → http://localhost:8765
 ```
 
+## 定期実行のセットアップ
+
+`collector.py` を一定間隔で動かすことで、タブの新規検出・閉じ済判定の sighting を継続的に蓄積できる。
+ADB は端末がUSB接続されている時だけ成功するので、未接続時もエラーで落ちず graceful にスキップされる。
+
+### systemd timer（推奨）
+
+ユーザー単位で動かすので sudo 不要。`~/.config/systemd/user/` 配下に作成する。
+
+```ini
+# ~/.config/systemd/user/tab-harvest.service
+[Unit]
+Description=android-tab-harvest collector
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/Projects/android-tab-harvest
+ExecStart=%h/Projects/android-tab-harvest/.venv/bin/python collector.py
+StandardOutput=append:%h/.local/state/tab-harvest.log
+StandardError=append:%h/.local/state/tab-harvest.log
+```
+
+```ini
+# ~/.config/systemd/user/tab-harvest.timer
+[Unit]
+Description=Run android-tab-harvest collector hourly
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+有効化:
+```bash
+mkdir -p ~/.local/state
+systemctl --user daemon-reload
+systemctl --user enable --now tab-harvest.timer
+
+# 状態確認
+systemctl --user list-timers | grep tab-harvest
+journalctl --user -u tab-harvest.service -n 50
+```
+
+ログオフ後も動かしたい場合は `loginctl enable-linger $USER` を一度実行する。
+
+### cron 版（systemd を使わない場合）
+
+```cron
+# crontab -e
+0 * * * * cd /home/USER/Projects/android-tab-harvest && .venv/bin/python collector.py >> /tmp/tab-harvest.log 2>&1
+```
+
 ## 将来の拡張
 
 - LM Studio (localhost:1234) 連携で記事要約
