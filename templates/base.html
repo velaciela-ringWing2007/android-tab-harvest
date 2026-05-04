@@ -32,10 +32,17 @@
         📱 収集
         <span id="collect-spinner" class="spinner htmx-indicator" aria-hidden="true"></span>
       </button>
-      <form method="post" action="/summarize" class="inline">
-        <input type="hidden" name="max" value="10">
-        <button type="submit" class="btn-link" title="未要約タブを最大10件 LM Studio で要約">✨ 要約バッチ</button>
-      </form>
+      <button type="button" class="btn-link"
+              hx-post="/summarize"
+              hx-vals='{"max": "10"}'
+              hx-target="#summarize-dialog"
+              hx-swap="innerHTML"
+              hx-disabled-elt="this"
+              hx-indicator="#summarize-spinner"
+              title="未要約タブを最大10件 LM Studio で要約（時間かかる場合あり）">
+        ✨ 要約バッチ
+        <span id="summarize-spinner" class="spinner htmx-indicator" aria-hidden="true"></span>
+      </button>
       <a href="/devices" class="btn-link">⚙️ 端末</a>
     </nav>
   </header>
@@ -85,6 +92,7 @@
   {% endif %}
 
   <dialog id="collect-dialog" class="result-dialog"></dialog>
+  <dialog id="summarize-dialog" class="result-dialog"></dialog>
 
   <main class="{% if all_domains %}with-sidebar{% endif %}">
     {% if all_domains %}

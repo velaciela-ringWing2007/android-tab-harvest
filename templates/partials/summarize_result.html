@@ -1,0 +1,43 @@
+<div class="dialog-content">
+  <h3>✨ 要約バッチ完了</h3>
+  {% set total = items|length %}
+  {% set dead = items|selectattr('result.is_dead')|list|length %}
+  {% set err = items|rejectattr('result.error', 'none')|list|length %}
+  {% set ok = total - dead - err %}
+  <table class="result-table">
+    <tr><th>処理件数</th><td><strong>{{ total }}</strong> 件</td></tr>
+    <tr><th>成功</th><td><strong class="num-new">{{ ok }}</strong> 件</td></tr>
+    <tr><th>dead-link</th><td><strong class="num-skip">{{ dead }}</strong> 件</td></tr>
+    <tr><th>エラー</th><td><strong class="num-err">{{ err }}</strong> 件</td></tr>
+  </table>
+
+  {% if items %}
+  <details class="result-errors" {% if err > 0 %}open{% endif %}>
+    <summary>処理結果一覧</summary>
+    <ul class="summarize-items">
+      {% for item in items %}
+        <li>
+          <span class="result-mark">{% if item.result.is_dead %}💀{% elif item.result.error %}❌{% else %}✓{% endif %}</span>
+          <a href="{{ item.tab.url }}" target="_blank" rel="noopener noreferrer">{{ item.tab.title or item.tab.url }}</a>
+          <div class="item-summary">{{ item.result.summary[:120] }}{% if item.result.summary|length > 120 %}…{% endif %}</div>
+          {% if item.result.tags %}
+            <div class="item-tags">
+              {% for t in item.result.tags %}<span class="mini-tag">{{ t }}</span>{% endfor %}
+            </div>
+          {% endif %}
+          {% if item.result.error %}<div class="item-error">{{ item.result.error }}</div>{% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% else %}
+    <p class="empty">未要約のタブはありません。</p>
+  {% endif %}
+
+  <div class="dialog-actions">
+    <button type="button" onclick="document.getElementById('summarize-dialog').close()">閉じる</button>
+    <button type="button" class="btn-primary"
+            onclick="document.getElementById('summarize-dialog').close(); location.reload()">一覧を更新</button>
+  </div>
+</div>
+<script>document.getElementById('summarize-dialog').showModal();</script>

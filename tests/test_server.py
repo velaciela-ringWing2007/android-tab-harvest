@@ -323,6 +323,47 @@ class TestCollect:
         assert "msg=" in r.headers["location"]
 
 
+class TestSummarizeBatch:
+    async def test_htmx_returns_dialog(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from summarizer import SummaryResult
+        import server as srv
+
+        async def fake_sum(db_path: str, max_count: int = 10):
+            return [
+                (1, SummaryResult(summary="ok summary", tags=["a"])),
+                (2, SummaryResult(summary="dead", tags=["dead-link"], is_dead=True)),
+                (3, SummaryResult(summary="boom", error="LM offline")),
+            ]
+
+        monkeypatch.setattr(srv, "summarize_pending", fake_sum)
+        r = await client.post(
+            "/summarize", data={"max": "10"}, headers={"HX-Request": "true"}
+        )
+        assert r.status_code == 200
+        # 件数が partial に出る
+        assert "要約バッチ完了" in r.text
+        assert "showModal" in r.text
+        # 成功1 / dead 1 / err 1
+        assert "num-new" in r.text and "num-skip" in r.text and "num-err" in r.text
+
+    async def test_non_htmx_redirects(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import server as srv
+
+        async def fake_sum(db_path: str, max_count: int = 10):
+            return []
+
+        monkeypatch.setattr(srv, "summarize_pending", fake_sum)
+        r = await client.post(
+            "/summarize", data={"max": "10"}, follow_redirects=False
+        )
+        assert r.status_code == 303
+        assert "msg=" in r.headers["location"]
+
+
 class TestSortOrder:
     async def test_default_is_desc(self, client: AsyncClient) -> None:
         r = await client.get("/", params={"sort": "updated"})

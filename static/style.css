@@ -390,6 +390,22 @@ dialog .num-err { color: var(--danger); }
 dialog .result-errors { margin-bottom: 12px; }
 dialog .result-errors ul { padding-left: 20px; max-height: 200px; overflow-y: auto; }
 dialog .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
+/* 要約バッチの個別結果リスト */
+.summarize-items { padding-left: 20px; max-height: 400px; overflow-y: auto; }
+.summarize-items li { margin-bottom: 10px; list-style: none; }
+.summarize-items .result-mark { margin-right: 4px; }
+.item-summary { color: var(--fg-muted); font-size: 12px; margin-top: 2px; white-space: pre-wrap; }
+.item-tags { margin-top: 2px; display: flex; gap: 4px; flex-wrap: wrap; }
+.mini-tag {
+  display: inline-block;
+  padding: 0 6px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 11px;
+}
+.item-error { color: var(--danger); font-size: 12px; margin-top: 2px; }
 .tab-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 
 /* ---- タグchip ---- */

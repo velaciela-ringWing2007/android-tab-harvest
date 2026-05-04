@@ -354,15 +354,24 @@ async def summarize_one(request: Request, tab_id: int):
 
 
 @app.post("/summarize")
-async def summarize_batch(max: int = Form(10)):
-    """未要約タブを最大 N 件まとめて要約。完了後にメッセージ付きでindexへ。"""
+async def summarize_batch(request: Request, max: int = Form(10)):
+    """未要約タブを最大 N 件まとめて要約。HTMX呼び出しなら結果ダイアログを返し、
+    通常POSTなら msg 付きでリダイレクト。
+    """
     results = await summarize_pending(DB_PATH, max_count=max)
+    if request.headers.get("HX-Request") == "true":
+        items = []
+        async with get_db(DB_PATH) as conn:
+            for tab_id, result in results:
+                tab = await db.get_tab(conn, tab_id)
+                items.append({"tab": tab, "result": result})
+        return templates.TemplateResponse(
+            request, "partials/summarize_result.html", {"items": items}
+        )
     n_dead = sum(1 for _, r in results if r.is_dead)
     n_err = sum(1 for _, r in results if r.error)
     n_ok = len(results) - n_dead - n_err
-    msg = (
-        f"要約: 成功 {n_ok}件 / dead-link {n_dead}件 / エラー {n_err}件"
-    )
+    msg = f"要約: 成功 {n_ok}件 / dead-link {n_dead}件 / エラー {n_err}件"
     return RedirectResponse(f"/?msg={msg}", status_code=303)
 
 
