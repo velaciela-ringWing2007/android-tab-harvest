@@ -29,6 +29,7 @@ DB_PATH = DEFAULT_DB_PATH
 PER_PAGE_DEFAULT = 50
 ALLOWED_STATUS = {"unread", "read", "later", "archived"}
 ALLOWED_SORT = {"updated", "created", "sightings"}
+ALLOWED_ORDER = {"asc", "desc"}
 
 
 @asynccontextmanager
@@ -68,17 +69,19 @@ def _now() -> int:
 
 def _validated_filters(
     status: str | None, device: int | None, tag: str | None, q: str | None,
-    sort: str, page: int, per_page: int,
+    sort: str, order: str, page: int, per_page: int,
 ) -> dict[str, object]:
     if status is not None and status not in ALLOWED_STATUS:
         status = None
     if sort not in ALLOWED_SORT:
         sort = "updated"
+    if order not in ALLOWED_ORDER:
+        order = "desc"
     page = max(1, page)
     per_page = max(1, min(200, per_page))
     return {
         "status": status, "device": device, "tag": tag, "q": q,
-        "sort": sort, "page": page, "per_page": per_page,
+        "sort": sort, "order": order, "page": page, "per_page": per_page,
     }
 
 
@@ -92,6 +95,7 @@ async def _load_listing(filters: dict[str, object]) -> dict[str, object]:
             tag=filters["tag"],  # type: ignore[arg-type]
             q=filters["q"],  # type: ignore[arg-type]
             sort=filters["sort"],  # type: ignore[arg-type]
+            order=filters["order"],  # type: ignore[arg-type]
             page=filters["page"],  # type: ignore[arg-type]
             per_page=filters["per_page"],  # type: ignore[arg-type]
         )
@@ -116,11 +120,12 @@ async def index(
     tag: str | None = None,
     q: str | None = None,
     sort: str = "updated",
+    order: str = "desc",
     page: int = 1,
     per_page: int = PER_PAGE_DEFAULT,
     msg: str | None = None,
 ):
-    filters = _validated_filters(status, device, tag, q, sort, page, per_page)
+    filters = _validated_filters(status, device, tag, q, sort, order, page, per_page)
     listing = await _load_listing(filters)
     async with get_db(DB_PATH) as conn:
         counts = await db.status_counts(conn)
@@ -147,10 +152,11 @@ async def tabs_partial(
     tag: str | None = None,
     q: str | None = None,
     sort: str = "updated",
+    order: str = "desc",
     page: int = 1,
     per_page: int = PER_PAGE_DEFAULT,
 ):
-    filters = _validated_filters(status, device, tag, q, sort, page, per_page)
+    filters = _validated_filters(status, device, tag, q, sort, order, page, per_page)
     listing = await _load_listing(filters)
     return templates.TemplateResponse(request, "partials/tab_list.html", listing)
 
@@ -204,6 +210,7 @@ async def bulk_action(
     tag: str | None = Form(None),
     q: str | None = Form(None),
     sort: str = Form("updated"),
+    order: str = Form("desc"),
     page: int = Form(1),
     per_page: int = Form(PER_PAGE_DEFAULT),
 ):
@@ -218,7 +225,7 @@ async def bulk_action(
                 await conn.commit()
         else:
             raise HTTPException(status_code=400, detail="invalid action")
-    filters = _validated_filters(status, device, tag, q, sort, page, per_page)
+    filters = _validated_filters(status, device, tag, q, sort, order, page, per_page)
     listing = await _load_listing(filters)
     return templates.TemplateResponse(request, "partials/tab_list.html", listing)
 

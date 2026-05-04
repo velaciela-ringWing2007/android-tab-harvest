@@ -45,14 +45,25 @@
       {% if filters.device %}<input type="hidden" name="device" value="{{ filters.device }}">{% endif %}
       {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
       {% if filters.sort %}<input type="hidden" name="sort" value="{{ filters.sort }}">{% endif %}
+      {% if filters.order %}<input type="hidden" name="order" value="{{ filters.order }}">{% endif %}
       <button type="submit">検索</button>
     </form>
 
     <span class="sort">
       ソート:
       {% for sk, lbl in [('updated', '更新'), ('created', '初検出'), ('sightings', '検出回数')] %}
-        <a class="chip small {% if filters.sort == sk %}active{% endif %}"
-           href="/{{ {'sort': sk, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q}|querystring }}">{{ lbl }}</a>
+        {% if filters.sort == sk %}
+          {# アクティブ：再クリックで方向トグル、現在の方向に応じた矢印 #}
+          {% set new_order = 'asc' if filters.order == 'desc' else 'desc' %}
+          {% set arrow = '↓' if filters.order == 'desc' else '↑' %}
+          <a class="chip small active"
+             title="クリックで方向反転"
+             href="/{{ {'sort': sk, 'order': new_order, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q}|querystring }}">{{ lbl }} {{ arrow }}</a>
+        {% else %}
+          {# 非アクティブ：desc にリセット #}
+          <a class="chip small"
+             href="/{{ {'sort': sk, 'order': 'desc', 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q}|querystring }}">{{ lbl }} ↕</a>
+        {% endif %}
       {% endfor %}
     </span>
   </div>

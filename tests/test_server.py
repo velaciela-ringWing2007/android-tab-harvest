@@ -252,6 +252,23 @@ class TestBulkAction:
         assert 'name="tag" value="tech"' in r.text
 
 
+class TestSortOrder:
+    async def test_default_is_desc(self, client: AsyncClient) -> None:
+        r = await client.get("/", params={"sort": "updated"})
+        assert r.status_code == 200
+        # 矢印 ↓ が active チップに含まれる
+        assert "↓" in r.text
+
+    async def test_asc_order_renders_arrow_up(self, client: AsyncClient) -> None:
+        r = await client.get("/", params={"sort": "updated", "order": "asc"})
+        assert r.status_code == 200
+        assert "↑" in r.text
+
+    async def test_invalid_order_falls_back_silently(self, client: AsyncClient) -> None:
+        r = await client.get("/", params={"sort": "updated", "order": "bogus"})
+        assert r.status_code == 200
+
+
 class TestNotFound:
     async def test_status_on_missing_tab(self, client: AsyncClient) -> None:
         r = await client.post("/tabs/9999/status", data={"status": "read"})

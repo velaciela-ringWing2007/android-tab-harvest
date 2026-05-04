@@ -15,6 +15,7 @@ from models import Device, DeviceWithStats, Tab, TabStatus, Tag
 DEFAULT_DB_PATH = "tabs.db"
 
 SortKey = Literal["updated", "created", "sightings"]
+SortOrder = Literal["asc", "desc"]
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS devices (
@@ -265,10 +266,13 @@ def _build_filter(
     return (" AND ".join(clauses), params)
 
 
-_SORT_SQL: dict[str, str] = {
-    "updated": "t.updated_at DESC, t.id DESC",
-    "created": "t.created_at DESC, t.id DESC",
-    "sightings": "sighting_count DESC, t.updated_at DESC, t.id DESC",
+_SORT_SQL: dict[tuple[str, str], str] = {
+    ("updated", "desc"): "t.updated_at DESC, t.id DESC",
+    ("updated", "asc"): "t.updated_at ASC, t.id ASC",
+    ("created", "desc"): "t.created_at DESC, t.id DESC",
+    ("created", "asc"): "t.created_at ASC, t.id ASC",
+    ("sightings", "desc"): "sighting_count DESC, t.updated_at DESC, t.id DESC",
+    ("sightings", "asc"): "sighting_count ASC, t.updated_at ASC, t.id ASC",
 }
 
 
@@ -280,6 +284,7 @@ async def list_tabs(
     tag: str | None = None,
     q: str | None = None,
     sort: SortKey = "updated",
+    order: SortOrder = "desc",
     page: int = 1,
     per_page: int = 50,
 ) -> list[Tab]:
@@ -287,7 +292,7 @@ async def list_tabs(
     sql = _BASE_SELECT
     if where_sql:
         sql += f" WHERE {where_sql}"
-    sql += f" ORDER BY {_SORT_SQL.get(sort, _SORT_SQL['updated'])}"
+    sql += f" ORDER BY {_SORT_SQL.get((sort, order), _SORT_SQL[('updated', 'desc')])}"
     sql += " LIMIT ? OFFSET ?"
     params = [*params, per_page, max(0, (page - 1) * per_page)]
 

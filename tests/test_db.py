@@ -393,6 +393,19 @@ class TestListTabs:
             tabs = await list_tabs(conn, sort="updated")
         assert [t.id for t in tabs] == [ids["t3"], ids["t2"], ids["t1"]]
 
+    async def test_sort_updated_asc(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, sort="updated", order="asc")
+        assert [t.id for t in tabs] == [ids["t1"], ids["t2"], ids["t3"]]
+
+    async def test_invalid_order_falls_back(self, db_path: str) -> None:
+        # _SORT_SQL に該当しない (sort, order) は updated/desc にフォールバック
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, sort="updated", order="bogus")  # type: ignore[arg-type]
+        assert [t.id for t in tabs] == [ids["t3"], ids["t2"], ids["t1"]]
+
     async def test_pagination(self, db_path: str) -> None:
         await _seed(db_path)
         async with get_db(db_path) as conn:

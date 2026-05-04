@@ -5,6 +5,7 @@
   {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
   {% if filters.q %}<input type="hidden" name="q" value="{{ filters.q }}">{% endif %}
   <input type="hidden" name="sort" value="{{ filters.sort }}">
+  <input type="hidden" name="order" value="{{ filters.order }}">
   <input type="hidden" name="page" value="{{ filters.page }}">
   <input type="hidden" name="per_page" value="{{ filters.per_page }}">
 
@@ -35,11 +36,11 @@
   {% if pages > 1 %}
   <nav class="pager">
     {% if filters.page > 1 %}
-      <a href="/{{ {'page': filters.page - 1, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">← 前</a>
+      <a href="/{{ {'page': filters.page - 1, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}">← 前</a>
     {% endif %}
     <span>{{ filters.page }} / {{ pages }}</span>
     {% if filters.page < pages %}
-      <a href="/{{ {'page': filters.page + 1, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">次 →</a>
+      <a href="/{{ {'page': filters.page + 1, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}">次 →</a>
     {% endif %}
   </nav>
   {% endif %}
