@@ -189,6 +189,69 @@ class TestDevices:
         assert count == 3
 
 
+class TestBulkAction:
+    async def test_bulk_mark_read(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={
+                "action": "read", "tab_ids": ["1", "3"],
+                "sort": "updated", "page": "1", "per_page": "50",
+            },
+        )
+        assert r.status_code == 200
+        assert "bulk-form" in r.text
+        async with get_db(server.DB_PATH) as conn:
+            t1 = await get_tab(conn, 1)
+            t2 = await get_tab(conn, 2)
+            t3 = await get_tab(conn, 3)
+        assert t1.status == "read"
+        assert t2.status == "unread"  # 対象外
+        assert t3.status == "read"
+
+    async def test_bulk_delete(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={
+                "action": "delete", "tab_ids": ["1", "2"],
+                "sort": "updated", "page": "1", "per_page": "50",
+            },
+        )
+        assert r.status_code == 200
+        async with get_db(server.DB_PATH) as conn:
+            assert await get_tab(conn, 1) is None
+            assert await get_tab(conn, 2) is None
+            assert await get_tab(conn, 3) is not None
+
+    async def test_bulk_no_selection_returns_listing(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={"action": "read", "sort": "updated", "page": "1", "per_page": "50"},
+        )
+        assert r.status_code == 200
+        assert "bulk-form" in r.text
+
+    async def test_bulk_invalid_action_400(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={
+                "action": "bogus", "tab_ids": ["1"],
+                "sort": "updated", "page": "1", "per_page": "50",
+            },
+        )
+        assert r.status_code == 400
+
+    async def test_bulk_preserves_filter_in_response(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={
+                "action": "read", "tab_ids": ["2"],
+                "tag": "tech", "sort": "updated", "page": "1", "per_page": "50",
+            },
+        )
+        assert r.status_code == 200
+        assert 'name="tag" value="tech"' in r.text
+
+
 class TestNotFound:
     async def test_status_on_missing_tab(self, client: AsyncClient) -> None:
         r = await client.post("/tabs/9999/status", data={"status": "read"})

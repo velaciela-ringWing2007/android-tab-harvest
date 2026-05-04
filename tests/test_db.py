@@ -12,6 +12,8 @@ import pytest
 from db import (
     add_sighting,
     add_tab_tag,
+    bulk_delete_tabs,
+    bulk_update_status,
     count_tabs,
     delete_device,
     delete_tab,
@@ -477,6 +479,89 @@ class TestUpdateAndDelete:
             row = await cur.fetchone()
         assert row is not None
         assert row[0] == 0
+
+
+class TestFTS:
+    """FTS5 trigram での全文検索の挙動。"""
+
+    async def test_short_query_uses_like_fallback(self, db_path: str) -> None:
+        # 2文字未満は trigram にならないので LIKE で部分一致
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, q="A")
+        assert any(t.id == ids["t1"] for t in tabs)  # "Article A"
+
+    async def test_3char_japanese_query_via_fts(self, db_path: str) -> None:
+        # 3文字以上の日本語クエリでFTSヒット（trigram tokenizer）
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tid = await upsert_tab(
+                conn, "https://j.example/", "h_j", "別ジャンル記事の集合", 1700000400
+            )
+            await conn.commit()
+            tabs = await list_tabs(conn, q="別ジャンル")
+        assert {t.id for t in tabs} == {tid}
+
+    async def test_special_chars_safe(self, db_path: str) -> None:
+        # 引用符を含むクエリでもFTS側でエラーにならない
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await update_tab_note(conn, ids["t1"], 'has "quote"', 1700001000)
+            await conn.commit()
+            tabs = await list_tabs(conn, q='quote')
+        assert any(t.id == ids["t1"] for t in tabs)
+
+    async def test_delete_removes_from_fts(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await delete_tab(conn, ids["t3"])
+            await conn.commit()
+            tabs = await list_tabs(conn, q="別ジャンル")
+        assert all(t.id != ids["t3"] for t in tabs)
+
+    async def test_update_title_reflected_in_fts(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await upsert_tab(conn, "https://a.example/x", "h_a", "更新後タイトル", 1700001000)
+            await conn.commit()
+            tabs = await list_tabs(conn, q="更新後")
+        assert any(t.id == ids["t1"] for t in tabs)
+
+
+class TestBulk:
+    async def test_bulk_update_status(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            n = await bulk_update_status(
+                conn, [ids["t1"], ids["t3"]], "read", 1700001000
+            )
+            await conn.commit()
+            tabs = await list_tabs(conn)
+        assert n == 2
+        by_id = {t.id: t for t in tabs}
+        assert by_id[ids["t1"]].status == "read"
+        assert by_id[ids["t2"]].status == "unread"  # 対象外
+        assert by_id[ids["t3"]].status == "read"
+
+    async def test_bulk_update_empty_list_is_noop(self, db_path: str) -> None:
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            n = await bulk_update_status(conn, [], "read", 1700001000)
+        assert n == 0
+
+    async def test_bulk_delete_cascades_sightings(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            n = await bulk_delete_tabs(conn, [ids["t1"], ids["t2"]])
+            await conn.commit()
+            cur = await conn.execute("SELECT COUNT(*) FROM tabs")
+            assert (await cur.fetchone())[0] == 1
+            cur = await conn.execute(
+                "SELECT COUNT(*) FROM tab_sightings WHERE tab_id IN (?, ?)",
+                (ids["t1"], ids["t2"]),
+            )
+            assert (await cur.fetchone())[0] == 0
+        assert n == 2
 
 
 class TestTags:

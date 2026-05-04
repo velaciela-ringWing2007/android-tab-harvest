@@ -193,6 +193,36 @@ async def delete_tab(tab_id: int):
     return Response(status_code=200, content="")
 
 
+@app.post("/tabs/bulk", response_class=HTMLResponse)
+async def bulk_action(
+    request: Request,
+    action: str = Form(...),
+    tab_ids: list[int] = Form(default=[]),
+    # フィルタ保持用（hidden）
+    status: str | None = Form(None),
+    device: int | None = Form(None),
+    tag: str | None = Form(None),
+    q: str | None = Form(None),
+    sort: str = Form("updated"),
+    page: int = Form(1),
+    per_page: int = Form(PER_PAGE_DEFAULT),
+):
+    if tab_ids:
+        if action == "delete":
+            async with get_db(DB_PATH) as conn:
+                await db.bulk_delete_tabs(conn, tab_ids)
+                await conn.commit()
+        elif action in ALLOWED_STATUS:
+            async with get_db(DB_PATH) as conn:
+                await db.bulk_update_status(conn, tab_ids, action, _now())  # type: ignore[arg-type]
+                await conn.commit()
+        else:
+            raise HTTPException(status_code=400, detail="invalid action")
+    filters = _validated_filters(status, device, tag, q, sort, page, per_page)
+    listing = await _load_listing(filters)
+    return templates.TemplateResponse(request, "partials/tab_list.html", listing)
+
+
 @app.post("/tabs/{tab_id}/tags", response_class=HTMLResponse)
 async def add_tag(request: Request, tab_id: int, name: str = Form(...)):
     async with get_db(DB_PATH) as conn:

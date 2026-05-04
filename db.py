@@ -62,14 +62,55 @@ CREATE INDEX IF NOT EXISTS idx_tabs_status ON tabs(status);
 CREATE INDEX IF NOT EXISTS idx_tabs_updated ON tabs(updated_at DESC);
 CREATE INDEX IF NOT EXISTS idx_sightings_tab ON tab_sightings(tab_id);
 CREATE INDEX IF NOT EXISTS idx_sightings_device ON tab_sightings(device_id);
+
+-- 全文検索: trigram トークナイザで日本語も含む3文字以上をマッチ。
+-- standard FTS（external contentではない）。tabs と同期するためにトリガで二重管理する。
+-- external content にすると delete/update のたびに 'delete' コマンドが必要で、
+-- 中間状態で disk image malformed を起こしやすかったため通常モードに統一。
+CREATE VIRTUAL TABLE IF NOT EXISTS tabs_fts USING fts5(
+  title, url, note,
+  tokenize='trigram'
+);
+
+CREATE TRIGGER IF NOT EXISTS tabs_ai AFTER INSERT ON tabs BEGIN
+  INSERT INTO tabs_fts(rowid, title, url, note)
+    VALUES (new.id, new.title, new.url, new.note);
+END;
+CREATE TRIGGER IF NOT EXISTS tabs_ad AFTER DELETE ON tabs BEGIN
+  DELETE FROM tabs_fts WHERE rowid = old.id;
+END;
+CREATE TRIGGER IF NOT EXISTS tabs_au AFTER UPDATE ON tabs BEGIN
+  DELETE FROM tabs_fts WHERE rowid = old.id;
+  INSERT INTO tabs_fts(rowid, title, url, note)
+    VALUES (new.id, new.title, new.url, new.note);
+END;
 """
+
+FTS_MIN_CHARS = 3
 
 
 async def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
-    """テーブルとインデックスを作成（既存なら何もしない）。"""
+    """テーブルとインデックスを作成（既存なら何もしない）。
+
+    既存DBへの後付けでFTSテーブルが空なら、tabs から一括でバックフィルする。
+    """
     async with aiosqlite.connect(db_path) as conn:
         await conn.executescript(_SCHEMA)
+        cur = await conn.execute("SELECT COUNT(*) FROM tabs")
+        tabs_count = (await cur.fetchone())[0]
+        cur = await conn.execute("SELECT COUNT(*) FROM tabs_fts")
+        fts_count = (await cur.fetchone())[0]
+        if tabs_count > 0 and fts_count == 0:
+            await conn.execute(
+                "INSERT INTO tabs_fts(rowid, title, url, note) "
+                "SELECT id, title, url, note FROM tabs"
+            )
         await conn.commit()
+
+
+def _fts_phrase(q: str) -> str:
+    """FTS5 にユーザー入力を安全に渡すため、引用符で囲んだフレーズに変換。"""
+    return '"' + q.replace('"', '""') + '"'
 
 
 @asynccontextmanager
@@ -206,11 +247,20 @@ def _build_filter(
         )
         params.append(tag)
     if q:
-        clauses.append(
-            "(COALESCE(t.title,'') LIKE ? OR t.url LIKE ? OR COALESCE(t.note,'') LIKE ?)"
-        )
-        like = f"%{q}%"
-        params.extend([like, like, like])
+        q_stripped = q.strip()
+        if len(q_stripped) >= FTS_MIN_CHARS:
+            # 3文字以上は FTS5（trigram） で高速マッチ
+            clauses.append(
+                "t.id IN (SELECT rowid FROM tabs_fts WHERE tabs_fts MATCH ?)"
+            )
+            params.append(_fts_phrase(q_stripped))
+        else:
+            # 短いクエリは trigram にならないので LIKE フォールバック
+            clauses.append(
+                "(COALESCE(t.title,'') LIKE ? OR t.url LIKE ? OR COALESCE(t.note,'') LIKE ?)"
+            )
+            like = f"%{q_stripped}%"
+            params.extend([like, like, like])
 
     return (" AND ".join(clauses), params)
 
@@ -299,6 +349,36 @@ async def update_tab_note(
 
 async def delete_tab(conn: aiosqlite.Connection, tab_id: int) -> None:
     await conn.execute("DELETE FROM tabs WHERE id = ?", (tab_id,))
+
+
+async def bulk_update_status(
+    conn: aiosqlite.Connection,
+    tab_ids: list[int],
+    status: TabStatus,
+    now: int,
+) -> int:
+    """指定IDのタブを一括でステータス変更。更新件数を返す。"""
+    if not tab_ids:
+        return 0
+    placeholders = ",".join("?" * len(tab_ids))
+    cur = await conn.execute(
+        f"UPDATE tabs SET status = ?, updated_at = ? WHERE id IN ({placeholders})",
+        [status, now, *tab_ids],
+    )
+    return cur.rowcount or 0
+
+
+async def bulk_delete_tabs(
+    conn: aiosqlite.Connection, tab_ids: list[int]
+) -> int:
+    """指定IDのタブを一括削除。CASCADEで sighting も消える。"""
+    if not tab_ids:
+        return 0
+    placeholders = ",".join("?" * len(tab_ids))
+    cur = await conn.execute(
+        f"DELETE FROM tabs WHERE id IN ({placeholders})", tab_ids
+    )
+    return cur.rowcount or 0
 
 
 async def list_devices(conn: aiosqlite.Connection) -> list[Device]:

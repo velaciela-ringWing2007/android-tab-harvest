@@ -44,6 +44,29 @@
       document.documentElement.dataset.view = next;
       localStorage.setItem('view', next);
     });
+
+    // 一括選択：個別 checkbox の変更で「選択数」「全選択チェック」を更新。
+    // 「全選択」クリックで全行 checkbox をトグル。HTMX 差し替え後にも再評価。
+    function refreshBulkBar() {
+      const all = document.querySelectorAll('input[name="tab_ids"]');
+      const checked = document.querySelectorAll('input[name="tab_ids"]:checked');
+      const count = document.getElementById('bulk-count');
+      const selectAll = document.getElementById('select-all');
+      if (count) count.textContent = checked.length + '件選択';
+      if (selectAll) {
+        selectAll.checked = all.length > 0 && checked.length === all.length;
+        selectAll.indeterminate = checked.length > 0 && checked.length < all.length;
+      }
+    }
+    document.body.addEventListener('change', (e) => {
+      if (e.target.id === 'select-all') {
+        document.querySelectorAll('input[name="tab_ids"]').forEach((cb) => {
+          cb.checked = e.target.checked;
+        });
+      }
+      if (e.target.matches('input[name="tab_ids"], #select-all')) refreshBulkBar();
+    });
+    document.body.addEventListener('htmx:afterSwap', refreshBulkBar);
   </script>
 
   {% if msg %}

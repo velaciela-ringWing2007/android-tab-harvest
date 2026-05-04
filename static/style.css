@@ -135,6 +135,37 @@ main { padding: 12px 16px 60px; max-width: 1280px; margin: 0 auto; }
 }
 .sort { color: var(--fg-muted); font-size: 13px; display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 
+/* ---- 一括操作バー ---- */
+.bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  position: sticky;
+  top: 50px;
+  z-index: 5;
+}
+.select-all-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+.select-all-label input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; }
+#bulk-count { color: var(--fg-muted); font-size: 13px; min-width: 6em; }
+.bulk-actions { display: flex; gap: 4px; flex-wrap: wrap; }
+.bulk-bar .list-meta { margin-left: auto; padding: 0; }
+
+/* ---- 行のチェックボックス ---- */
+.row-check { width: 16px; height: 16px; cursor: pointer; flex-shrink: 0; align-self: center; }
+[data-view="card"] .row-check { align-self: flex-start; position: absolute; top: 8px; right: 8px; }
+[data-view="card"] .tab-row { position: relative; }
+
 /* ---- 一覧（リストモード = デフォルト） ---- */
 .list-meta { color: var(--fg-muted); padding: 4px 0 8px; font-size: 13px; }
 .tab-list { display: flex; flex-direction: column; gap: 6px; }

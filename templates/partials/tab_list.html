@@ -1,13 +1,35 @@
-<section class="tab-list">
-  <div class="list-meta">{{ total }}件 (ページ {{ filters.page }} / {{ ((total + filters.per_page - 1) // filters.per_page) or 1 }})</div>
+<form id="bulk-form" hx-target="#bulk-form" hx-swap="outerHTML">
+  {# フィルタを hidden で保持。POST /tabs/bulk のレスポンスで同じフィルタを再現するため #}
+  {% if filters.status %}<input type="hidden" name="status" value="{{ filters.status }}">{% endif %}
+  {% if filters.device %}<input type="hidden" name="device" value="{{ filters.device }}">{% endif %}
+  {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
+  {% if filters.q %}<input type="hidden" name="q" value="{{ filters.q }}">{% endif %}
+  <input type="hidden" name="sort" value="{{ filters.sort }}">
+  <input type="hidden" name="page" value="{{ filters.page }}">
+  <input type="hidden" name="per_page" value="{{ filters.per_page }}">
 
-  {% if not tabs %}
-    <p class="empty">該当するタブはありません。</p>
-  {% endif %}
+  <div class="bulk-bar">
+    <label class="select-all-label">
+      <input type="checkbox" id="select-all">
+      <span id="bulk-count">0件選択</span>
+    </label>
+    <span class="bulk-actions">
+      <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "read"}'>✓ 既読</button>
+      <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "later"}'>📌 後で</button>
+      <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "archived"}'>🗄️ 保管</button>
+      <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "delete"}' hx-confirm="選択したタブを削除しますか？（取り消せません）" class="btn-danger">🗑️ 削除</button>
+    </span>
+    <span class="list-meta">{{ total }}件 (ページ {{ filters.page }} / {{ ((total + filters.per_page - 1) // filters.per_page) or 1 }})</span>
+  </div>
 
-  {% for tab in tabs %}
-    {% include "partials/tab_row.html" %}
-  {% endfor %}
+  <div class="tab-list">
+    {% if not tabs %}
+      <p class="empty">該当するタブはありません。</p>
+    {% endif %}
+    {% for tab in tabs %}
+      {% include "partials/tab_row.html" %}
+    {% endfor %}
+  </div>
 
   {% set pages = ((total + filters.per_page - 1) // filters.per_page) or 1 %}
   {% if pages > 1 %}
@@ -21,4 +43,4 @@
     {% endif %}
   </nav>
   {% endif %}
-</section>
+</form>

@@ -1,4 +1,5 @@
 <article id="tab-{{ tab.id }}" class="tab-row status-{{ tab.status }}{% if not tab.still_open %} closed{% endif %}">
+  <input type="checkbox" name="tab_ids" value="{{ tab.id }}" class="row-check" aria-label="select tab {{ tab.id }}">
   <div class="tab-main">
     <a class="tab-title" href="{{ tab.url }}" target="_blank" rel="noopener noreferrer">
       {{ tab.title or tab.url }}
