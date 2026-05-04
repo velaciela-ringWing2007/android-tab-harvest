@@ -103,6 +103,16 @@ def extract_text(html: str) -> str:
 # ---- LLM ----
 
 
+def _normalize_summary(text: str) -> str:
+    """LLM出力の各行を strip し、空行を削除した文字列に整える。
+
+    モデルによっては行頭にスペースや箇条書き記号の前置きが入って表示が
+    ガタつくことがあるので保存前に正規化する。
+    """
+    lines = [line.strip() for line in (text or "").splitlines()]
+    return "\n".join(line for line in lines if line)
+
+
 def parse_llm_response(content: str) -> dict[str, Any]:
     """LLMが返した文字列から JSON を取り出す。
 
@@ -179,7 +189,7 @@ def summarize_url(url: str, title: str | None) -> SummaryResult:
     except Exception as e:  # noqa: BLE001 - LLMエラーは握って Result に
         log.exception("LLM call failed for %s", url)
         return SummaryResult(summary="(要約失敗)", tags=[], error=str(e))
-    summary = str(obj.get("summary", "")).strip() or "(空)"
+    summary = _normalize_summary(str(obj.get("summary", ""))) or "(空)"
     tags_raw = obj.get("tags") or []
     if not isinstance(tags_raw, list):
         tags_raw = []

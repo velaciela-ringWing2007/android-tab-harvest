@@ -344,7 +344,8 @@ main.with-sidebar > .content { min-width: 0; }
   border-left: 3px solid var(--accent);
   border-radius: 4px;
   font-size: 13px;
-  white-space: pre-wrap;
+  white-space: pre-line;  /* 連続スペースを1つに圧縮、改行は維持 */
+  text-align: left;
   color: var(--fg);
 }
 /* HTMX indicator: 通信中だけ表示 */

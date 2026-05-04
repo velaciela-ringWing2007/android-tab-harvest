@@ -103,6 +103,34 @@ class TestSummarizeUrl:
         assert result.is_dead is False
 
 
+class TestNormalizeSummary:
+    def test_strips_each_line(self) -> None:
+        text = "  1行目  \n   2行目\n3行目  "
+        assert summarizer._normalize_summary(text) == "1行目\n2行目\n3行目"
+
+    def test_drops_empty_lines(self) -> None:
+        text = "1行目\n\n   \n2行目"
+        assert summarizer._normalize_summary(text) == "1行目\n2行目"
+
+    def test_empty_input(self) -> None:
+        assert summarizer._normalize_summary("") == ""
+        assert summarizer._normalize_summary("   \n   ") == ""
+
+    def test_summarize_url_normalizes_summary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(summarizer, "fetch_body", lambda url, timeout=15.0: (200, "x"))
+        monkeypatch.setattr(summarizer, "extract_text", lambda html: "本文")
+        monkeypatch.setattr(
+            summarizer, "call_llm",
+            lambda title, url, body, **kw: {
+                "summary": "  1行目\n   2行目\n  3行目", "tags": []
+            },
+        )
+        result = summarizer.summarize_url("https://x.example/", "T")
+        assert result.summary == "1行目\n2行目\n3行目"
+
+
 class TestPersistAndPending:
     async def test_persist_summary_writes_db_and_tags(
         self, db_path: str, monkeypatch: pytest.MonkeyPatch
