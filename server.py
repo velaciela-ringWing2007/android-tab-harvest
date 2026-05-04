@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, AsyncIterator
 from urllib.parse import urlencode
 
-from fastapi import FastAPI, Form, HTTPException, Request
+from fastapi import FastAPI, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -52,8 +52,12 @@ def _format_date(epoch: int | None) -> str:
 
 
 def _querystring(params: dict[str, Any]) -> str:
-    cleaned = {k: v for k, v in params.items() if v not in (None, "")}
-    return ("?" + urlencode(cleaned)) if cleaned else ""
+    cleaned: dict[str, Any] = {}
+    for k, v in params.items():
+        if v is None or v == "" or v == []:
+            continue
+        cleaned[k] = v
+    return ("?" + urlencode(cleaned, doseq=True)) if cleaned else ""
 
 
 templates.env.filters["fmtdate"] = _format_date
@@ -69,7 +73,7 @@ def _now() -> int:
 
 def _validated_filters(
     status: str | None, device: int | None, tag: str | None, q: str | None,
-    domain: str | None, sort: str, order: str, page: int, per_page: int,
+    domain: list[str], sort: str, order: str, page: int, per_page: int,
 ) -> dict[str, object]:
     if status is not None and status not in ALLOWED_STATUS:
         status = None
@@ -79,8 +83,15 @@ def _validated_filters(
         order = "desc"
     page = max(1, page)
     per_page = max(1, min(200, per_page))
+    # 重複と空文字を除去（順序保持）
+    seen: set[str] = set()
+    domain_list: list[str] = []
+    for d in domain or []:
+        if d and d not in seen:
+            seen.add(d)
+            domain_list.append(d)
     return {
-        "status": status, "device": device, "tag": tag, "q": q, "domain": domain,
+        "status": status, "device": device, "tag": tag, "q": q, "domain": domain_list,
         "sort": sort, "order": order, "page": page, "per_page": per_page,
     }
 
@@ -94,7 +105,7 @@ async def _load_listing(filters: dict[str, object]) -> dict[str, object]:
             device_id=filters["device"],  # type: ignore[arg-type]
             tag=filters["tag"],  # type: ignore[arg-type]
             q=filters["q"],  # type: ignore[arg-type]
-            domain=filters["domain"],  # type: ignore[arg-type]
+            domains=filters["domain"],  # type: ignore[arg-type]
             sort=filters["sort"],  # type: ignore[arg-type]
             order=filters["order"],  # type: ignore[arg-type]
             page=filters["page"],  # type: ignore[arg-type]
@@ -106,7 +117,7 @@ async def _load_listing(filters: dict[str, object]) -> dict[str, object]:
             device_id=filters["device"],  # type: ignore[arg-type]
             tag=filters["tag"],  # type: ignore[arg-type]
             q=filters["q"],  # type: ignore[arg-type]
-            domain=filters["domain"],  # type: ignore[arg-type]
+            domains=filters["domain"],  # type: ignore[arg-type]
         )
     return {"tabs": tabs, "total": total, "filters": filters}
 
@@ -121,7 +132,7 @@ async def index(
     device: int | None = None,
     tag: str | None = None,
     q: str | None = None,
-    domain: str | None = None,
+    domain: list[str] = Query(default=[]),
     sort: str = "updated",
     order: str = "desc",
     page: int = 1,
@@ -158,7 +169,7 @@ async def tabs_partial(
     device: int | None = None,
     tag: str | None = None,
     q: str | None = None,
-    domain: str | None = None,
+    domain: list[str] = Query(default=[]),
     sort: str = "updated",
     order: str = "desc",
     page: int = 1,
@@ -221,7 +232,7 @@ async def bulk_action(
     device: int | None = Form(None),
     tag: str | None = Form(None),
     q: str | None = Form(None),
-    domain: str | None = Form(None),
+    domain: list[str] = Form(default=[]),
     sort: str = Form("updated"),
     order: str = Form("desc"),
     page: int = Form(1),

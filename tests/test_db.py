@@ -378,12 +378,25 @@ class TestListTabs:
             tabs = await list_tabs(conn, tag="tech")
         assert {t.id for t in tabs} == {ids["t2"]}
 
-    async def test_filters_by_domain(self, db_path: str) -> None:
+    async def test_filters_by_single_domain(self, db_path: str) -> None:
         # _seed は a.example, b.example, c.example の3ホスト
         ids = await _seed(db_path)
         async with get_db(db_path) as conn:
-            tabs = await list_tabs(conn, domain="a.example")
+            tabs = await list_tabs(conn, domains=["a.example"])
         assert {t.id for t in tabs} == {ids["t1"]}
+
+    async def test_filters_by_multiple_domains_or(self, db_path: str) -> None:
+        # 複数ドメインは OR 条件
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, domains=["a.example", "c.example"])
+        assert {t.id for t in tabs} == {ids["t1"], ids["t3"]}
+
+    async def test_empty_domains_list_is_no_filter(self, db_path: str) -> None:
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, domains=[])
+        assert len(tabs) == 3
 
     async def test_q_matches_title_or_note(self, db_path: str) -> None:
         ids = await _seed(db_path)

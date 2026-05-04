@@ -46,7 +46,7 @@
       {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
       {% if filters.sort %}<input type="hidden" name="sort" value="{{ filters.sort }}">{% endif %}
       {% if filters.order %}<input type="hidden" name="order" value="{{ filters.order }}">{% endif %}
-      {% if filters.domain %}<input type="hidden" name="domain" value="{{ filters.domain }}">{% endif %}
+      {% for d in filters.domain %}<input type="hidden" name="domain" value="{{ d }}">{% endfor %}
       <button type="submit">検索</button>
     </form>
 

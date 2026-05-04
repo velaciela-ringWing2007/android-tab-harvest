@@ -4,7 +4,7 @@
   {% if filters.device %}<input type="hidden" name="device" value="{{ filters.device }}">{% endif %}
   {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
   {% if filters.q %}<input type="hidden" name="q" value="{{ filters.q }}">{% endif %}
-  {% if filters.domain %}<input type="hidden" name="domain" value="{{ filters.domain }}">{% endif %}
+  {% for d in filters.domain %}<input type="hidden" name="domain" value="{{ d }}">{% endfor %}
   <input type="hidden" name="sort" value="{{ filters.sort }}">
   <input type="hidden" name="order" value="{{ filters.order }}">
   <input type="hidden" name="page" value="{{ filters.page }}">

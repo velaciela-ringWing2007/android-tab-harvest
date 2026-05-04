@@ -20,27 +20,6 @@
   <header class="topbar">
     <h1><a href="/">🔍 android-tab-harvest</a></h1>
     <nav>
-      {% if all_domains %}
-      <details class="dropdown">
-        <summary class="btn-link">
-          🌐 ドメイン
-          {% if filters and filters.domain %}<span class="dropdown-active">{{ filters.domain }}</span>{% endif %}
-          ▾
-        </summary>
-        <div class="dropdown-menu">
-          <a href="/{{ {'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
-             class="{% if not filters.domain %}active{% endif %}">
-            全部 <span class="count">{{ all_domains|sum(attribute=1) }}</span>
-          </a>
-          {% for host, n in all_domains %}
-            <a href="/{{ {'domain': host, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
-               class="{% if filters.domain == host %}active{% endif %}">
-              {{ host }} <span class="count">{{ n }}</span>
-            </a>
-          {% endfor %}
-        </div>
-      </details>
-      {% endif %}
       <button type="button" class="btn-icon" id="view-toggle" title="表示切替">⊞</button>
       <button type="button" class="btn-icon" id="theme-toggle" title="テーマ切替">🌗</button>
       <form method="post" action="/collect" class="inline">
@@ -94,8 +73,47 @@
   <div class="flash">{{ msg }}</div>
   {% endif %}
 
-  <main>
-    {% block content %}{% endblock %}
+  <main class="{% if all_domains %}with-sidebar{% endif %}">
+    {% if all_domains %}
+    <aside class="sidebar">
+      <h3>
+        🌐 ドメイン
+        {% if filters.domain %}<span class="sidebar-badge">{{ filters.domain|length }}</span>{% endif %}
+      </h3>
+
+      {# 「全部」 = ドメイン選択を全解除 #}
+      <a href="/{{ {'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
+         class="sidebar-item {% if not filters.domain %}active{% endif %}">
+        <span class="name">全部</span>
+        <span class="count">{{ all_domains|sum(attribute=1) }}</span>
+      </a>
+
+      {% for host, n in all_domains %}
+        {% if host in filters.domain %}
+          {# 選択中: クリックで自分を外す #}
+          {% set rest = filters.domain|reject('equalto', host)|list %}
+          <a href="/{{ {'domain': rest, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
+             class="sidebar-item selected"
+             title="クリックで「{{ host }}」を解除">
+            <span class="name">{{ host }}</span>
+            <span class="remove-x" aria-hidden="true">×</span>
+          </a>
+        {% else %}
+          {# 未選択: クリックで追加 #}
+          {% set new_list = filters.domain + [host] %}
+          <a href="/{{ {'domain': new_list, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
+             class="sidebar-item"
+             title="クリックで「{{ host }}」を追加">
+            <span class="name">{{ host }}</span>
+            <span class="count">{{ n }}</span>
+          </a>
+        {% endif %}
+      {% endfor %}
+    </aside>
+    {% endif %}
+    <div class="content">
+      {% block content %}{% endblock %}
+    </div>
   </main>
 </body>
 </html>

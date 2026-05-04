@@ -265,9 +265,12 @@ def _build_filter(
     device_id: int | None,
     tag: str | None,
     q: str | None,
-    domain: str | None = None,
+    domains: list[str] | None = None,
 ) -> tuple[str, list[object]]:
-    """WHERE句と引数リストを組み立てる（先頭に WHERE は付けない）。"""
+    """WHERE句と引数リストを組み立てる（先頭に WHERE は付けない）。
+
+    domains が複数指定された場合は OR 条件（IN句）で扱う。
+    """
     clauses: list[str] = []
     params: list[object] = []
 
@@ -285,9 +288,10 @@ def _build_filter(
             "WHERE tt.tab_id = t.id AND g.name = ?)"
         )
         params.append(tag)
-    if domain:
-        clauses.append("t.host = ?")
-        params.append(domain)
+    if domains:
+        placeholders = ",".join("?" * len(domains))
+        clauses.append(f"t.host IN ({placeholders})")
+        params.extend(domains)
     if q:
         q_stripped = q.strip()
         if len(q_stripped) >= FTS_MIN_CHARS:
@@ -324,13 +328,13 @@ async def list_tabs(
     device_id: int | None = None,
     tag: str | None = None,
     q: str | None = None,
-    domain: str | None = None,
+    domains: list[str] | None = None,
     sort: SortKey = "updated",
     order: SortOrder = "desc",
     page: int = 1,
     per_page: int = 50,
 ) -> list[Tab]:
-    where_sql, params = _build_filter(status, device_id, tag, q, domain)
+    where_sql, params = _build_filter(status, device_id, tag, q, domains)
     sql = _BASE_SELECT
     if where_sql:
         sql += f" WHERE {where_sql}"
@@ -350,9 +354,9 @@ async def count_tabs(
     device_id: int | None = None,
     tag: str | None = None,
     q: str | None = None,
-    domain: str | None = None,
+    domains: list[str] | None = None,
 ) -> int:
-    where_sql, params = _build_filter(status, device_id, tag, q, domain)
+    where_sql, params = _build_filter(status, device_id, tag, q, domains)
     sql = "SELECT COUNT(*) FROM tabs t"
     if where_sql:
         sql += f" WHERE {where_sql}"
