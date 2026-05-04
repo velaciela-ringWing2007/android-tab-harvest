@@ -172,6 +172,53 @@ class TestPersistAndPending:
         results = await summarizer.summarize_pending(db_path, max_count=10)
         assert [tid for tid, _ in results] == [t2]
 
+    async def test_detail_summarize_writes_summary_long(
+        self, db_path: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            tid = await upsert_tab(conn, "https://x/", "h_x", "T", 1700000000)
+            await conn.commit()
+
+        monkeypatch.setattr(
+            summarizer, "summarize_url_detail",
+            lambda url, title: summarizer.DetailResult(text="詳しい\n要約\n本文"),
+        )
+        result = await summarizer.summarize_tab(db_path, tid, detail=True, now=1700001234)
+        assert isinstance(result, summarizer.DetailResult)
+
+        async with get_db(db_path) as conn:
+            tab = await get_tab(conn, tid)
+        assert tab.summary_long == "詳しい\n要約\n本文"
+        assert tab.summarized_long_at == 1700001234
+        # 短い要約は触らない
+        assert tab.summary is None
+
+    async def test_detail_normalizes_response(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(summarizer, "fetch_body", lambda url, timeout=15.0: (200, "x"))
+        monkeypatch.setattr(summarizer, "extract_text", lambda html: "本文")
+        monkeypatch.setattr(
+            summarizer, "call_llm_text",
+            lambda title, url, body, **kw: "  1行目\n   2行目  \n\n3行目  ",
+        )
+        result = summarizer.summarize_url_detail("https://x/", "T")
+        assert result.text == "1行目\n2行目\n3行目"
+
+    async def test_detail_dead_link_does_not_call_llm(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(summarizer, "fetch_body", lambda url, timeout=15.0: (404, ""))
+
+        def must_not_be_called(*a, **kw):
+            raise AssertionError("LLM should not be called for dead link")
+
+        monkeypatch.setattr(summarizer, "call_llm_text", must_not_be_called)
+        result = summarizer.summarize_url_detail("https://x/", "T")
+        assert result.is_dead is True
+        assert "404" in result.text
+
     async def test_summarize_pending_respects_max(
         self, db_path: str, monkeypatch: pytest.MonkeyPatch
     ) -> None:

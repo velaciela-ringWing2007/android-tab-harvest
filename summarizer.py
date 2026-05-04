@@ -56,11 +56,32 @@ URL: {url}
 {body}
 """
 
+DETAIL_PROMPT_TEMPLATE = """以下のWebページの本文を**詳しく日本語で要約**してください。
+
+要件:
+- 5〜7行程度
+- 各段落の主張・根拠・結論を含める
+- 専門用語は適度に補足
+- 出力は**要約テキストのみ**（JSON / コードブロック / 前置き禁止）
+
+タイトル: {title}
+URL: {url}
+本文:
+{body}
+"""
+
 
 @dataclass
 class SummaryResult:
     summary: str
     tags: list[str] = field(default_factory=list)
+    error: str | None = None
+    is_dead: bool = False
+
+
+@dataclass
+class DetailResult:
+    text: str
     error: str | None = None
     is_dead: bool = False
 
@@ -137,12 +158,7 @@ def parse_llm_response(content: str) -> dict[str, Any]:
         raise
 
 
-def call_llm(
-    title: str, url: str, body: str,
-    lm_url: str | None = None, timeout: float = LM_TIMEOUT,
-) -> dict[str, Any]:
-    """LM Studio OpenAI互換APIを呼んでJSONをparseして返す。"""
-    prompt = PROMPT_TEMPLATE.format(title=title or "", url=url, body=body)
+def _post_chat(prompt: str, lm_url: str | None, timeout: float) -> str:
     payload = {
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.3,
@@ -151,9 +167,25 @@ def call_llm(
     with httpx.Client(timeout=timeout) as client:
         resp = client.post(lm_url or _lm_url(), json=payload)
     resp.raise_for_status()
-    data = resp.json()
-    content = data["choices"][0]["message"]["content"]
-    return parse_llm_response(content)
+    return resp.json()["choices"][0]["message"]["content"]
+
+
+def call_llm(
+    title: str, url: str, body: str,
+    lm_url: str | None = None, timeout: float = LM_TIMEOUT,
+) -> dict[str, Any]:
+    """LM Studio OpenAI互換APIを呼んでJSONをparseして返す（短い要約用）。"""
+    prompt = PROMPT_TEMPLATE.format(title=title or "", url=url, body=body)
+    return parse_llm_response(_post_chat(prompt, lm_url, timeout))
+
+
+def call_llm_text(
+    title: str, url: str, body: str,
+    lm_url: str | None = None, timeout: float = LM_TIMEOUT,
+) -> str:
+    """詳細要約用：JSON ではなくテキストをそのまま返す。"""
+    prompt = DETAIL_PROMPT_TEMPLATE.format(title=title or "", url=url, body=body)
+    return _post_chat(prompt, lm_url, timeout)
 
 
 # ---- 1タブの要約 ----
@@ -203,7 +235,7 @@ def summarize_url(url: str, title: str | None) -> SummaryResult:
 async def persist_summary(
     db_path: str, tab_id: int, result: SummaryResult, now: int
 ) -> None:
-    """要約結果を tabs.summary に保存し、提案タグを付与（既存タグはスキップ）。"""
+    """短い要約結果を tabs.summary に保存し、提案タグを付与（既存タグはスキップ）。"""
     async with get_db(db_path) as conn:
         await conn.execute(
             "UPDATE tabs SET summary = ?, summarized_at = ?, updated_at = ? WHERE id = ?",
@@ -217,15 +249,51 @@ async def persist_summary(
         await conn.commit()
 
 
+def summarize_url_detail(url: str, title: str | None) -> DetailResult:
+    """5-7行の詳細要約。タグ付与は行わない。"""
+    status, html = fetch_body(url)
+    if status == -1:
+        return DetailResult(text="アクセス不可（ネットワークエラー）", is_dead=True)
+    if status >= 400:
+        return DetailResult(text=f"アクセス不可（HTTP {status}）", is_dead=True)
+    body = extract_text(html)
+    if not body.strip():
+        return DetailResult(text="本文を抽出できませんでした", is_dead=True)
+    try:
+        text = call_llm_text(title or "", url, body)
+    except Exception as e:  # noqa: BLE001
+        log.exception("LLM detail call failed for %s", url)
+        return DetailResult(text="(詳細要約失敗)", error=str(e))
+    return DetailResult(text=_normalize_summary(text) or "(空)")
+
+
+async def persist_detail_summary(
+    db_path: str, tab_id: int, text: str, now: int
+) -> None:
+    async with get_db(db_path) as conn:
+        await conn.execute(
+            "UPDATE tabs SET summary_long = ?, summarized_long_at = ?, updated_at = ? "
+            "WHERE id = ?",
+            (text, now, now, tab_id),
+        )
+        await conn.commit()
+
+
 async def summarize_tab(
-    db_path: str, tab_id: int, now: int | None = None
-) -> SummaryResult:
+    db_path: str, tab_id: int, detail: bool = False, now: int | None = None
+) -> SummaryResult | DetailResult:
+    """1タブを要約。detail=True なら詳細要約 (summary_long) を保存。"""
     async with get_db(db_path) as conn:
         tab = await get_tab(conn, tab_id)
     if tab is None:
         raise ValueError(f"tab {tab_id} not found")
+    timestamp = now or int(time.time())
+    if detail:
+        result = summarize_url_detail(tab.url, tab.title)
+        await persist_detail_summary(db_path, tab_id, result.text, timestamp)
+        return result
     result = summarize_url(tab.url, tab.title)
-    await persist_summary(db_path, tab_id, result, now or int(time.time()))
+    await persist_summary(db_path, tab_id, result, timestamp)
     return result
 
 

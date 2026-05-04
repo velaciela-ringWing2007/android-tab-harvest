@@ -44,6 +44,8 @@ class Tab:
     first_seen: int | None = None
     still_open: bool = False
     tags: list[Tag] = field(default_factory=list)
+    summary_long: str | None = None
+    summarized_long_at: int | None = None
 
 
 @dataclass

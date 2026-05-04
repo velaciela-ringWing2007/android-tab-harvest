@@ -28,17 +28,19 @@ CREATE TABLE IF NOT EXISTS devices (
 );
 
 CREATE TABLE IF NOT EXISTS tabs (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  url           TEXT NOT NULL,
-  url_hash      TEXT NOT NULL UNIQUE,
-  host          TEXT,
-  title         TEXT,
-  status        TEXT NOT NULL DEFAULT 'unread',
-  note          TEXT,
-  summary       TEXT,
-  summarized_at INTEGER,
-  created_at    INTEGER NOT NULL,
-  updated_at    INTEGER NOT NULL
+  id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+  url                TEXT NOT NULL,
+  url_hash           TEXT NOT NULL UNIQUE,
+  host               TEXT,
+  title              TEXT,
+  status             TEXT NOT NULL DEFAULT 'unread',
+  note               TEXT,
+  summary            TEXT,
+  summarized_at      INTEGER,
+  summary_long       TEXT,
+  summarized_long_at INTEGER,
+  created_at         INTEGER NOT NULL,
+  updated_at         INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS tab_sightings (
@@ -101,12 +103,19 @@ async def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     - FTSテーブルが空ならタブ全件をバックフィル
     """
     async with aiosqlite.connect(db_path) as conn:
-        # 旧スキーマの既存DBに対応：_SCHEMA を流す前に host カラムを足す
+        # 旧スキーマの既存DBに対応：_SCHEMA を流す前に追加カラムを足す
         # （_SCHEMA 内に CREATE INDEX ... ON tabs(host) があるため、先に追加が必要）
         cur = await conn.execute("PRAGMA table_info(tabs)")
         existing_cols = {r[1] for r in await cur.fetchall()}
-        if existing_cols and "host" not in existing_cols:
-            await conn.execute("ALTER TABLE tabs ADD COLUMN host TEXT")
+        if existing_cols:
+            if "host" not in existing_cols:
+                await conn.execute("ALTER TABLE tabs ADD COLUMN host TEXT")
+            if "summary_long" not in existing_cols:
+                await conn.execute("ALTER TABLE tabs ADD COLUMN summary_long TEXT")
+            if "summarized_long_at" not in existing_cols:
+                await conn.execute(
+                    "ALTER TABLE tabs ADD COLUMN summarized_long_at INTEGER"
+                )
             await conn.commit()
 
         await conn.executescript(_SCHEMA)
@@ -237,6 +246,8 @@ def _row_to_tab(row: aiosqlite.Row | tuple) -> Tab:
         first_seen=row[12],
         still_open=bool(row[13]) if row[13] is not None else False,
         tags=tags,
+        summary_long=row[15],
+        summarized_long_at=row[16],
     )
 
 
@@ -255,7 +266,9 @@ SELECT
      ORDER BY s.seen_at DESC LIMIT 1) AS still_open,
   (SELECT GROUP_CONCAT(g.id || ':' || g.name, CHAR(31))
      FROM tab_tags tt JOIN tags g ON tt.tag_id = g.id
-     WHERE tt.tab_id = t.id ORDER BY g.name) AS tags
+     WHERE tt.tab_id = t.id ORDER BY g.name) AS tags,
+  t.summary_long,
+  t.summarized_long_at
 FROM tabs t
 """
 
