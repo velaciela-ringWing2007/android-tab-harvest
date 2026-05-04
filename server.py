@@ -61,8 +61,20 @@ def _querystring(params: dict[str, Any]) -> str:
     return ("?" + urlencode(cleaned, doseq=True)) if cleaned else ""
 
 
+def _tojson_ja(value: Any) -> str:
+    """日本語をエスケープせずに JSON 文字列化する Jinja フィルタ。
+
+    Jinja の組み込み tojson は ensure_ascii=True で `\\u30c6...` になり、
+    モーダル本文を browser dev tools で見るとき読みづらい。
+    """
+    import json
+
+    return json.dumps(value, ensure_ascii=False)
+
+
 templates.env.filters["fmtdate"] = _format_date
 templates.env.filters["querystring"] = _querystring
+templates.env.filters["tojson_ja"] = _tojson_ja
 
 
 # ---- 共通ユーティリティ ----
@@ -344,13 +356,36 @@ async def trigger_collect(request: Request):
 
 
 @app.post("/tabs/{tab_id}/summarize", response_class=HTMLResponse)
-async def summarize_one(request: Request, tab_id: int):
-    """1タブを LM Studio で要約してタブ行を差し替えで返す。"""
-    try:
-        await summarize_tab(DB_PATH, tab_id)
-    except ValueError:
+async def summarize_one(
+    request: Request, tab_id: int,
+    detail: bool = False, force: bool = False,
+):
+    """1タブを LM Studio で要約。
+
+    detail=False: 短い3行要約（既存挙動）→ tab_row 差し替え
+    detail=True : 詳細5-7行要約 → 詳細モーダル（既に summary_long があれば
+                 LLM を呼ばずキャッシュを返す。force=True で強制再生成）
+    """
+    if not detail:
+        try:
+            await summarize_tab(DB_PATH, tab_id)
+        except ValueError:
+            raise HTTPException(status_code=404, detail="tab not found")
+        return await _render_tab_row(request, tab_id)
+
+    # detail mode
+    async with get_db(DB_PATH) as conn:
+        tab = await db.get_tab(conn, tab_id)
+    if tab is None:
         raise HTTPException(status_code=404, detail="tab not found")
-    return await _render_tab_row(request, tab_id)
+    cached = bool(tab.summary_long) and not force
+    if not cached:
+        await summarize_tab(DB_PATH, tab_id, detail=True)
+        async with get_db(DB_PATH) as conn:
+            tab = await db.get_tab(conn, tab_id)
+    return templates.TemplateResponse(
+        request, "partials/detail_summary.html", {"tab": tab, "cached": cached}
+    )
 
 
 @app.post("/summarize")

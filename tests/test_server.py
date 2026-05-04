@@ -323,6 +323,95 @@ class TestCollect:
         assert "msg=" in r.headers["location"]
 
 
+class TestDetailSummary:
+    async def test_detail_post_calls_llm_and_returns_modal(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from summarizer import DetailResult
+        import server as srv
+
+        called: list[bool] = []
+
+        async def fake_summarize(db_path: str, tab_id: int, detail: bool = False, now=None):
+            called.append(True)
+            assert detail is True
+            # 模擬: DB を直接更新
+            async with get_db(db_path) as conn:
+                await conn.execute(
+                    "UPDATE tabs SET summary_long = ?, summarized_long_at = ? WHERE id = ?",
+                    ("詳しい要約だよ", 1700001234, tab_id),
+                )
+                await conn.commit()
+            return DetailResult(text="詳しい要約だよ")
+
+        monkeypatch.setattr(srv, "summarize_tab", fake_summarize)
+        r = await client.post("/tabs/1/summarize?detail=1")
+        assert r.status_code == 200
+        assert "詳細要約" in r.text
+        assert "詳しい要約だよ" in r.text
+        assert "showModal" in r.text
+        assert called == [True]
+
+    async def test_detail_uses_cache_when_already_summarized(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import server as srv
+
+        # 既存の summary_long を仕込む
+        async with get_db(server.DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE tabs SET summary_long = ?, summarized_long_at = ? WHERE id = ?",
+                ("キャッシュ済み詳細", 1700000999, 1),
+            )
+            await conn.commit()
+
+        async def must_not_be_called(*a, **kw):
+            raise AssertionError("LLM should not be called when cached")
+
+        monkeypatch.setattr(srv, "summarize_tab", must_not_be_called)
+        r = await client.post("/tabs/1/summarize?detail=1")
+        assert r.status_code == 200
+        assert "キャッシュ済み詳細" in r.text
+        assert "(キャッシュ)" in r.text
+
+    async def test_detail_force_bypasses_cache(
+        self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from summarizer import DetailResult
+        import server as srv
+
+        # 既存値を入れる
+        async with get_db(server.DB_PATH) as conn:
+            await conn.execute(
+                "UPDATE tabs SET summary_long = ?, summarized_long_at = ? WHERE id = ?",
+                ("古いキャッシュ", 1700000000, 1),
+            )
+            await conn.commit()
+
+        called: list[bool] = []
+
+        async def fake_summarize(db_path: str, tab_id: int, detail: bool = False, now=None):
+            called.append(True)
+            async with get_db(db_path) as conn:
+                await conn.execute(
+                    "UPDATE tabs SET summary_long = ?, summarized_long_at = ? WHERE id = ?",
+                    ("新しい詳細要約", 1700001234, tab_id),
+                )
+                await conn.commit()
+            return DetailResult(text="新しい詳細要約")
+
+        monkeypatch.setattr(srv, "summarize_tab", fake_summarize)
+        r = await client.post("/tabs/1/summarize?detail=1&force=1")
+        assert r.status_code == 200
+        assert "新しい詳細要約" in r.text
+        assert "(キャッシュ)" not in r.text
+        assert called == [True]
+
+    async def test_detail_404_for_missing_tab(self, client: AsyncClient) -> None:
+        r = await client.post("/tabs/9999/summarize?detail=1")
+        assert r.status_code == 404
+
+
 class TestSummarizeBatch:
     async def test_htmx_returns_dialog(
         self, client: AsyncClient, monkeypatch: pytest.MonkeyPatch

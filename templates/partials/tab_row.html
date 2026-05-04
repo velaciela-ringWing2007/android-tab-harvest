@@ -15,11 +15,7 @@
       {% if tab.still_open %}<span class="open-mark">(開いてる)</span>{% else %}<span class="closed-mark">(閉じ済)</span>{% endif %}
       {% if tab.note %}<span class="note">📝 {{ tab.note }}</span>{% endif %}
     </div>
-    {% if tab.summary %}
-      <div class="tab-summary" title="要約日時 {{ tab.summarized_at|fmtdate }}">
-        ✨ {{ tab.summary }}
-      </div>
-    {% endif %}
+    {% if tab.summary %}<div class="tab-summary" title="要約日時 {{ tab.summarized_at|fmtdate }}">✨ {{ tab.summary }}</div>{% endif %}
     <div class="tab-tags">
       {% for tg in tab.tags %}
         <span class="tag-chip">
@@ -63,8 +59,17 @@
             hx-target="#tab-{{ tab.id }}" hx-swap="outerHTML"
             hx-indicator="#tab-{{ tab.id }} .htmx-indicator"
             class="btn"
-            title="LM Studioで要約 + タグ自動提案">
+            title="LM Studioで3行要約 + タグ自動提案">
       ✨ 要約
+    </button>
+    <button type="button"
+            hx-post="/tabs/{{ tab.id }}/summarize?detail=1"
+            hx-target="#detail-dialog" hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            hx-indicator="#tab-{{ tab.id }} .htmx-indicator"
+            class="btn{% if tab.summary_long %} btn-cached{% endif %}"
+            title="{% if tab.summary_long %}詳細要約 生成済み（クリックで表示）{% else %}詳しく要約してポップアップ表示{% endif %}">
+      📄 詳しく{% if tab.summary_long %} ●{% endif %}
     </button>
     <button type="button"
             hx-delete="/tabs/{{ tab.id }}"

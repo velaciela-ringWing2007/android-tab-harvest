@@ -1,0 +1,52 @@
+<div class="dialog-content detail-summary-dialog">
+  <h3>📄 詳細要約{% if cached %} <small class="cached-mark">(キャッシュ)</small>{% endif %}</h3>
+
+  <div class="detail-tab-info">
+    <a class="detail-title" href="{{ tab.url }}" target="_blank" rel="noopener noreferrer">
+      {% if tab.host %}<img class="favicon" loading="lazy" alt=""
+           src="https://www.google.com/s2/favicons?domain={{ tab.host }}&sz=32"
+           onerror="this.style.display='none'">{% endif %}
+      {{ tab.title or tab.url }}
+    </a>
+    <div class="detail-meta">
+      {{ tab.host or '不明' }}
+      {% if tab.summarized_long_at %}· 要約 {{ tab.summarized_long_at|fmtdate }}{% endif %}
+    </div>
+  </div>
+
+  <div class="markdown-content" id="detail-md-content"></div>
+  <script type="application/json" id="detail-md-data">{{ tab.summary_long|tojson_ja }}</script>
+
+  {% if tab.summary %}
+  <details class="detail-short">
+    <summary>短い要約</summary>
+    <div class="detail-text">{{ tab.summary }}</div>
+  </details>
+  {% endif %}
+
+  <div class="dialog-actions">
+    <button type="button"
+            hx-post="/tabs/{{ tab.id }}/summarize?detail=1&force=1"
+            hx-target="#detail-dialog"
+            hx-swap="innerHTML"
+            hx-disabled-elt="this"
+            hx-indicator="#detail-spinner"
+            class="btn">
+      🔄 再生成
+      <span id="detail-spinner" class="spinner htmx-indicator" aria-hidden="true"></span>
+    </button>
+    <button type="button" onclick="document.getElementById('detail-dialog').close()">閉じる</button>
+  </div>
+</div>
+<script>
+  (function () {
+    const data = JSON.parse(document.getElementById('detail-md-data').textContent || '""');
+    const target = document.getElementById('detail-md-content');
+    if (target && window.marked) {
+      target.innerHTML = window.marked.parse(data || '');
+    } else if (target) {
+      target.textContent = data || '';  // marked が読めない時のフォールバック
+    }
+    document.getElementById('detail-dialog').showModal();
+  })();
+</script>
