@@ -50,3 +50,17 @@ def normalize_url(url: str) -> str:
 def url_hash(url: str) -> str:
     """正規化URLのSHA1ハッシュ（重複排除キー）。"""
     return hashlib.sha1(normalize_url(url).encode("utf-8")).hexdigest()
+
+
+def extract_host(url: str) -> str:
+    """URLからホスト名を取り出す（lowercase、port除去、`www.` プレフィックス除去）。
+
+    `blog.example.com` などのサブドメインは保持。パース失敗時は空文字を返す。
+    """
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return ""
+    if host.startswith("www."):
+        host = host[4:]
+    return host

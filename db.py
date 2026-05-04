@@ -11,6 +11,7 @@ from typing import AsyncIterator, Literal
 import aiosqlite
 
 from models import Device, DeviceWithStats, Tab, TabStatus, Tag
+from url_utils import extract_host
 
 DEFAULT_DB_PATH = "tabs.db"
 
@@ -30,6 +31,7 @@ CREATE TABLE IF NOT EXISTS tabs (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   url           TEXT NOT NULL,
   url_hash      TEXT NOT NULL UNIQUE,
+  host          TEXT,
   title         TEXT,
   status        TEXT NOT NULL DEFAULT 'unread',
   note          TEXT,
@@ -61,6 +63,7 @@ CREATE TABLE IF NOT EXISTS tab_tags (
 
 CREATE INDEX IF NOT EXISTS idx_tabs_status ON tabs(status);
 CREATE INDEX IF NOT EXISTS idx_tabs_updated ON tabs(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tabs_host ON tabs(host);
 CREATE INDEX IF NOT EXISTS idx_sightings_tab ON tab_sightings(tab_id);
 CREATE INDEX IF NOT EXISTS idx_sightings_device ON tab_sightings(device_id);
 
@@ -91,12 +94,34 @@ FTS_MIN_CHARS = 3
 
 
 async def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
-    """テーブルとインデックスを作成（既存なら何もしない）。
+    """テーブルとインデックスを作成し、必要ならマイグレーションを実行する。
 
-    既存DBへの後付けでFTSテーブルが空なら、tabs から一括でバックフィルする。
+    マイグレーション:
+    - tabs.host カラムが無ければ追加し、既存行を url から抽出してバックフィル
+    - FTSテーブルが空ならタブ全件をバックフィル
     """
     async with aiosqlite.connect(db_path) as conn:
+        # 旧スキーマの既存DBに対応：_SCHEMA を流す前に host カラムを足す
+        # （_SCHEMA 内に CREATE INDEX ... ON tabs(host) があるため、先に追加が必要）
+        cur = await conn.execute("PRAGMA table_info(tabs)")
+        existing_cols = {r[1] for r in await cur.fetchall()}
+        if existing_cols and "host" not in existing_cols:
+            await conn.execute("ALTER TABLE tabs ADD COLUMN host TEXT")
+            await conn.commit()
+
         await conn.executescript(_SCHEMA)
+
+        # 既存行の host を url から導出してバックフィル
+        cur = await conn.execute(
+            "SELECT id, url FROM tabs WHERE host IS NULL OR host = ''"
+        )
+        rows = await cur.fetchall()
+        for tab_id, url in rows:
+            await conn.execute(
+                "UPDATE tabs SET host = ? WHERE id = ?", (extract_host(url), tab_id)
+            )
+
+        # FTSバックフィル
         cur = await conn.execute("SELECT COUNT(*) FROM tabs")
         tabs_count = (await cur.fetchone())[0]
         cur = await conn.execute("SELECT COUNT(*) FROM tabs_fts")
@@ -148,12 +173,13 @@ async def upsert_tab(
 ) -> int:
     """url_hash が既存なら title/updated_at を更新してIDを返す。
 
-    新規なら status='unread', created_at=updated_at=now で INSERT。
+    新規なら status='unread', created_at=updated_at=now で INSERT。host も保存。
     """
+    host = extract_host(url)
     await conn.execute(
-        "INSERT OR IGNORE INTO tabs (url, url_hash, title, status, created_at, updated_at) "
-        "VALUES (?, ?, ?, 'unread', ?, ?)",
-        (url, url_hash, title, now, now),
+        "INSERT OR IGNORE INTO tabs (url, url_hash, host, title, status, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, 'unread', ?, ?)",
+        (url, url_hash, host, title, now, now),
     )
     # 既存レコードのタイトルは最新のものに追従させる（リネームされる記事もあるので）
     await conn.execute(
@@ -239,6 +265,7 @@ def _build_filter(
     device_id: int | None,
     tag: str | None,
     q: str | None,
+    domain: str | None = None,
 ) -> tuple[str, list[object]]:
     """WHERE句と引数リストを組み立てる（先頭に WHERE は付けない）。"""
     clauses: list[str] = []
@@ -258,6 +285,9 @@ def _build_filter(
             "WHERE tt.tab_id = t.id AND g.name = ?)"
         )
         params.append(tag)
+    if domain:
+        clauses.append("t.host = ?")
+        params.append(domain)
     if q:
         q_stripped = q.strip()
         if len(q_stripped) >= FTS_MIN_CHARS:
@@ -294,12 +324,13 @@ async def list_tabs(
     device_id: int | None = None,
     tag: str | None = None,
     q: str | None = None,
+    domain: str | None = None,
     sort: SortKey = "updated",
     order: SortOrder = "desc",
     page: int = 1,
     per_page: int = 50,
 ) -> list[Tab]:
-    where_sql, params = _build_filter(status, device_id, tag, q)
+    where_sql, params = _build_filter(status, device_id, tag, q, domain)
     sql = _BASE_SELECT
     if where_sql:
         sql += f" WHERE {where_sql}"
@@ -319,8 +350,9 @@ async def count_tabs(
     device_id: int | None = None,
     tag: str | None = None,
     q: str | None = None,
+    domain: str | None = None,
 ) -> int:
-    where_sql, params = _build_filter(status, device_id, tag, q)
+    where_sql, params = _build_filter(status, device_id, tag, q, domain)
     sql = "SELECT COUNT(*) FROM tabs t"
     if where_sql:
         sql += f" WHERE {where_sql}"
@@ -449,6 +481,17 @@ async def list_tags(conn: aiosqlite.Connection) -> list[Tag]:
     cur = await conn.execute("SELECT id, name FROM tags ORDER BY name")
     rows = await cur.fetchall()
     return [Tag(id=r[0], name=r[1]) for r in rows]
+
+
+async def list_domains(conn: aiosqlite.Connection) -> list[tuple[str, int]]:
+    """ドメインごとのタブ数を多い順で返す（空ドメインは除外）。"""
+    cur = await conn.execute(
+        "SELECT host, COUNT(*) AS n FROM tabs "
+        "WHERE host IS NOT NULL AND host != '' "
+        "GROUP BY host ORDER BY n DESC, host ASC"
+    )
+    rows = await cur.fetchall()
+    return [(r[0], int(r[1])) for r in rows]
 
 
 async def list_tab_tags(conn: aiosqlite.Connection, tab_id: int) -> list[Tag]:

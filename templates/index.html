@@ -5,10 +5,10 @@
 <section class="filters">
   <div class="filter-row">
     <span class="filter-label">端末:</span>
-    <a class="chip {% if not filters.device %}active{% endif %}" href="/{{ {'status': filters.status, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">全部</a>
+    <a class="chip {% if not filters.device %}active{% endif %}" href="/{{ {'status': filters.status, 'tag': filters.tag, 'q': filters.q, 'domain': filters.domain, 'sort': filters.sort, 'order': filters.order}|querystring }}">全部</a>
     {% for d in devices %}
       <a class="chip {% if filters.device == d.id %}active{% endif %}"
-         href="/{{ {'device': d.id, 'status': filters.status, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">
+         href="/{{ {'device': d.id, 'status': filters.status, 'tag': filters.tag, 'q': filters.q, 'domain': filters.domain, 'sort': filters.sort, 'order': filters.order}|querystring }}">
         {{ d.nickname or d.model or d.serial }}
       </a>
     {% endfor %}
@@ -16,10 +16,10 @@
 
   <div class="filter-row">
     <span class="filter-label">状態:</span>
-    <a class="chip {% if not filters.status %}active{% endif %}" href="/{{ {'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">全て</a>
+    <a class="chip {% if not filters.status %}active{% endif %}" href="/{{ {'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'domain': filters.domain, 'sort': filters.sort, 'order': filters.order}|querystring }}">全て</a>
     {% for s, label in [('unread', '未読'), ('later', '後で読む'), ('read', '既読'), ('archived', 'アーカイブ')] %}
       <a class="chip {% if filters.status == s %}active{% endif %}"
-         href="/{{ {'status': s, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort}|querystring }}">
+         href="/{{ {'status': s, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'domain': filters.domain, 'sort': filters.sort, 'order': filters.order}|querystring }}">
         {{ label }} {{ counts[s] }}
       </a>
     {% endfor %}
@@ -28,10 +28,10 @@
   {% if all_tags %}
   <div class="filter-row">
     <span class="filter-label">タグ:</span>
-    <a class="chip {% if not filters.tag %}active{% endif %}" href="/{{ {'status': filters.status, 'device': filters.device, 'q': filters.q, 'sort': filters.sort}|querystring }}">all</a>
+    <a class="chip {% if not filters.tag %}active{% endif %}" href="/{{ {'status': filters.status, 'device': filters.device, 'q': filters.q, 'domain': filters.domain, 'sort': filters.sort, 'order': filters.order}|querystring }}">all</a>
     {% for t in all_tags %}
       <a class="chip {% if filters.tag == t.name %}active{% endif %}"
-         href="/{{ {'tag': t.name, 'status': filters.status, 'device': filters.device, 'q': filters.q, 'sort': filters.sort}|querystring }}">
+         href="/{{ {'tag': t.name, 'status': filters.status, 'device': filters.device, 'q': filters.q, 'domain': filters.domain, 'sort': filters.sort, 'order': filters.order}|querystring }}">
         {{ t.name }}
       </a>
     {% endfor %}
@@ -46,6 +46,7 @@
       {% if filters.tag %}<input type="hidden" name="tag" value="{{ filters.tag }}">{% endif %}
       {% if filters.sort %}<input type="hidden" name="sort" value="{{ filters.sort }}">{% endif %}
       {% if filters.order %}<input type="hidden" name="order" value="{{ filters.order }}">{% endif %}
+      {% if filters.domain %}<input type="hidden" name="domain" value="{{ filters.domain }}">{% endif %}
       <button type="submit">検索</button>
     </form>
 
@@ -58,11 +59,11 @@
           {% set arrow = '↓' if filters.order == 'desc' else '↑' %}
           <a class="chip small active"
              title="クリックで方向反転"
-             href="/{{ {'sort': sk, 'order': new_order, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q}|querystring }}">{{ lbl }} {{ arrow }}</a>
+             href="/{{ {'sort': sk, 'order': new_order, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'domain': filters.domain}|querystring }}">{{ lbl }} {{ arrow }}</a>
         {% else %}
           {# 非アクティブ：desc にリセット #}
           <a class="chip small"
-             href="/{{ {'sort': sk, 'order': 'desc', 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q}|querystring }}">{{ lbl }} ↕</a>
+             href="/{{ {'sort': sk, 'order': 'desc', 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'domain': filters.domain}|querystring }}">{{ lbl }} ↕</a>
         {% endif %}
       {% endfor %}
     </span>

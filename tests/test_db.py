@@ -24,6 +24,7 @@ from db import (
     init_db,
     list_devices,
     list_devices_with_stats,
+    list_domains,
     list_tab_tags,
     list_tabs,
     list_tags,
@@ -377,6 +378,13 @@ class TestListTabs:
             tabs = await list_tabs(conn, tag="tech")
         assert {t.id for t in tabs} == {ids["t2"]}
 
+    async def test_filters_by_domain(self, db_path: str) -> None:
+        # _seed は a.example, b.example, c.example の3ホスト
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            tabs = await list_tabs(conn, domain="a.example")
+        assert {t.id for t in tabs} == {ids["t1"]}
+
     async def test_q_matches_title_or_note(self, db_path: str) -> None:
         ids = await _seed(db_path)
         async with get_db(db_path) as conn:
@@ -611,6 +619,53 @@ class TestBulk:
         assert n == 2
         assert all(t.id != tag_id for t in tags_t1)
         assert all(t.id != tag_id for t in tags_t2)
+
+
+class TestDomains:
+    async def test_upsert_tab_stores_host(self, db_path: str) -> None:
+        await init_db(db_path)
+        async with get_db(db_path) as conn:
+            tid = await upsert_tab(
+                conn, "https://www.example.com/x", "h_x", "T", 1700000000
+            )
+            await conn.commit()
+            cur = await conn.execute("SELECT host FROM tabs WHERE id = ?", (tid,))
+            row = await cur.fetchone()
+        assert row[0] == "example.com"  # www. が外れる
+
+    async def test_list_domains_counts_per_host(self, db_path: str) -> None:
+        await _seed(db_path)
+        async with get_db(db_path) as conn:
+            domains = await list_domains(conn)
+        names = {host: n for host, n in domains}
+        assert names == {"a.example": 1, "b.example": 1, "c.example": 1}
+
+    async def test_init_backfills_host_for_legacy_rows(self, db_path: str) -> None:
+        # 旧スキーマ（host カラム無し）相当の状態を作る
+        import aiosqlite
+
+        async with aiosqlite.connect(db_path) as conn:
+            await conn.execute(
+                "CREATE TABLE tabs ("
+                "id INTEGER PRIMARY KEY AUTOINCREMENT, url TEXT NOT NULL, "
+                "url_hash TEXT NOT NULL UNIQUE, title TEXT, status TEXT NOT NULL DEFAULT 'unread', "
+                "note TEXT, summary TEXT, summarized_at INTEGER, "
+                "created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)"
+            )
+            await conn.execute(
+                "INSERT INTO tabs (url, url_hash, title, created_at, updated_at) "
+                "VALUES ('https://www.legacy.example/x', 'h1', 'T', 1, 1)"
+            )
+            await conn.commit()
+
+        await init_db(db_path)
+
+        async with get_db(db_path) as conn:
+            cur = await conn.execute(
+                "SELECT host FROM tabs WHERE url_hash = 'h1'"
+            )
+            row = await cur.fetchone()
+        assert row[0] == "legacy.example"
 
 
 class TestTabTags:

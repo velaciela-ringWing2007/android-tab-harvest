@@ -89,6 +89,52 @@ a:hover { text-decoration: underline; }
 .topbar h1 a { color: var(--fg); }
 .topbar nav { display: flex; gap: 6px; align-items: center; }
 
+/* ドロップダウン (<details>) */
+details.dropdown { position: relative; }
+details.dropdown summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 4px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--fg);
+  user-select: none;
+}
+details.dropdown summary::-webkit-details-marker { display: none; }
+details.dropdown summary::marker { content: ""; }
+details.dropdown[open] summary { background: var(--accent-bg); border-color: var(--accent); }
+.dropdown-active {
+  font-weight: 600;
+  color: var(--accent);
+  margin-left: 4px;
+}
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 0;
+  min-width: 240px;
+  max-height: 70vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 20;
+}
+.dropdown-menu a {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 12px;
+  color: var(--fg);
+}
+.dropdown-menu a:hover { background: var(--accent-bg); text-decoration: none; }
+.dropdown-menu a.active { background: var(--accent-bg); font-weight: 600; }
+.dropdown-menu .count { color: var(--fg-muted); font-size: 12px; }
+
 .flash {
   margin: 8px 16px 0;
   padding: 8px 12px;

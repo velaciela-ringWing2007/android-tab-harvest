@@ -20,6 +20,27 @@
   <header class="topbar">
     <h1><a href="/">🔍 android-tab-harvest</a></h1>
     <nav>
+      {% if all_domains %}
+      <details class="dropdown">
+        <summary class="btn-link">
+          🌐 ドメイン
+          {% if filters and filters.domain %}<span class="dropdown-active">{{ filters.domain }}</span>{% endif %}
+          ▾
+        </summary>
+        <div class="dropdown-menu">
+          <a href="/{{ {'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
+             class="{% if not filters.domain %}active{% endif %}">
+            全部 <span class="count">{{ all_domains|sum(attribute=1) }}</span>
+          </a>
+          {% for host, n in all_domains %}
+            <a href="/{{ {'domain': host, 'status': filters.status, 'device': filters.device, 'tag': filters.tag, 'q': filters.q, 'sort': filters.sort, 'order': filters.order}|querystring }}"
+               class="{% if filters.domain == host %}active{% endif %}">
+              {{ host }} <span class="count">{{ n }}</span>
+            </a>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
       <button type="button" class="btn-icon" id="view-toggle" title="表示切替">⊞</button>
       <button type="button" class="btn-icon" id="theme-toggle" title="テーマ切替">🌗</button>
       <form method="post" action="/collect" class="inline">

@@ -69,7 +69,7 @@ def _now() -> int:
 
 def _validated_filters(
     status: str | None, device: int | None, tag: str | None, q: str | None,
-    sort: str, order: str, page: int, per_page: int,
+    domain: str | None, sort: str, order: str, page: int, per_page: int,
 ) -> dict[str, object]:
     if status is not None and status not in ALLOWED_STATUS:
         status = None
@@ -80,7 +80,7 @@ def _validated_filters(
     page = max(1, page)
     per_page = max(1, min(200, per_page))
     return {
-        "status": status, "device": device, "tag": tag, "q": q,
+        "status": status, "device": device, "tag": tag, "q": q, "domain": domain,
         "sort": sort, "order": order, "page": page, "per_page": per_page,
     }
 
@@ -94,6 +94,7 @@ async def _load_listing(filters: dict[str, object]) -> dict[str, object]:
             device_id=filters["device"],  # type: ignore[arg-type]
             tag=filters["tag"],  # type: ignore[arg-type]
             q=filters["q"],  # type: ignore[arg-type]
+            domain=filters["domain"],  # type: ignore[arg-type]
             sort=filters["sort"],  # type: ignore[arg-type]
             order=filters["order"],  # type: ignore[arg-type]
             page=filters["page"],  # type: ignore[arg-type]
@@ -105,6 +106,7 @@ async def _load_listing(filters: dict[str, object]) -> dict[str, object]:
             device_id=filters["device"],  # type: ignore[arg-type]
             tag=filters["tag"],  # type: ignore[arg-type]
             q=filters["q"],  # type: ignore[arg-type]
+            domain=filters["domain"],  # type: ignore[arg-type]
         )
     return {"tabs": tabs, "total": total, "filters": filters}
 
@@ -119,18 +121,22 @@ async def index(
     device: int | None = None,
     tag: str | None = None,
     q: str | None = None,
+    domain: str | None = None,
     sort: str = "updated",
     order: str = "desc",
     page: int = 1,
     per_page: int = PER_PAGE_DEFAULT,
     msg: str | None = None,
 ):
-    filters = _validated_filters(status, device, tag, q, sort, order, page, per_page)
+    filters = _validated_filters(
+        status, device, tag, q, domain, sort, order, page, per_page
+    )
     listing = await _load_listing(filters)
     async with get_db(DB_PATH) as conn:
         counts = await db.status_counts(conn)
         devices = await db.list_devices(conn)
         all_tags = await db.list_tags(conn)
+        all_domains = await db.list_domains(conn)
     return templates.TemplateResponse(
         request,
         "index.html",
@@ -139,6 +145,7 @@ async def index(
             "counts": counts,
             "devices": devices,
             "all_tags": all_tags,
+            "all_domains": all_domains,
             "msg": msg,
         },
     )
@@ -151,12 +158,15 @@ async def tabs_partial(
     device: int | None = None,
     tag: str | None = None,
     q: str | None = None,
+    domain: str | None = None,
     sort: str = "updated",
     order: str = "desc",
     page: int = 1,
     per_page: int = PER_PAGE_DEFAULT,
 ):
-    filters = _validated_filters(status, device, tag, q, sort, order, page, per_page)
+    filters = _validated_filters(
+        status, device, tag, q, domain, sort, order, page, per_page
+    )
     listing = await _load_listing(filters)
     return templates.TemplateResponse(request, "partials/tab_list.html", listing)
 
@@ -211,6 +221,7 @@ async def bulk_action(
     device: int | None = Form(None),
     tag: str | None = Form(None),
     q: str | None = Form(None),
+    domain: str | None = Form(None),
     sort: str = Form("updated"),
     order: str = Form("desc"),
     page: int = Form(1),
@@ -242,7 +253,9 @@ async def bulk_action(
                 await conn.commit()
         else:
             raise HTTPException(status_code=400, detail="invalid action")
-    filters = _validated_filters(status, device, tag, q, sort, order, page, per_page)
+    filters = _validated_filters(
+        status, device, tag, q, domain, sort, order, page, per_page
+    )
     listing = await _load_listing(filters)
     return templates.TemplateResponse(request, "partials/tab_list.html", listing)
 

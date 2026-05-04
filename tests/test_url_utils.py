@@ -3,7 +3,7 @@
 SPEC.md セクション2「URL正規化ルール」に基づく。
 """
 
-from url_utils import normalize_url, url_hash
+from url_utils import extract_host, normalize_url, url_hash
 
 
 class TestNormalizeUrl:
@@ -107,3 +107,28 @@ class TestUrlHash:
         assert isinstance(h, str)
         assert len(h) == 40
         assert all(c in "0123456789abcdef" for c in h)
+
+
+class TestExtractHost:
+    def test_basic(self) -> None:
+        assert extract_host("https://example.com/x") == "example.com"
+
+    def test_strips_www_prefix(self) -> None:
+        assert extract_host("https://www.example.com/") == "example.com"
+
+    def test_keeps_other_subdomains(self) -> None:
+        assert extract_host("https://blog.example.com/") == "blog.example.com"
+        assert extract_host("https://www2.example.com/") == "www2.example.com"
+
+    def test_lowercases(self) -> None:
+        assert extract_host("https://EXAMPLE.com/x") == "example.com"
+
+    def test_strips_port(self) -> None:
+        assert extract_host("http://localhost:8000/x") == "localhost"
+
+    def test_handles_japanese_domain(self) -> None:
+        assert extract_host("https://www.example.co.jp/x") == "example.co.jp"
+
+    def test_invalid_url_returns_empty(self) -> None:
+        assert extract_host("") == ""
+        assert extract_host("not a url") == ""
