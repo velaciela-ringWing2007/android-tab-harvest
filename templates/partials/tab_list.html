@@ -18,6 +18,8 @@
       <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "read"}'>✓ 既読</button>
       <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "later"}'>📌 後で</button>
       <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "archived"}'>🗄️ 保管</button>
+      <input type="text" name="tag_name" placeholder="タグ名" maxlength="30" class="bulk-tag-input">
+      <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "tag_add"}' title="入力したタグを選択タブに付与">🏷️ タグ付与</button>
       <button type="button" hx-post="/tabs/bulk" hx-vals='{"action": "delete"}' hx-confirm="選択したタブを削除しますか？（取り消せません）" class="btn-danger">🗑️ 削除</button>
     </span>
     <span class="list-meta">{{ total }}件 (ページ {{ filters.page }} / {{ ((total + filters.per_page - 1) // filters.per_page) or 1 }})</span>

@@ -21,6 +21,12 @@ class Device:
 
 
 @dataclass
+class Tag:
+    name: str
+    id: int | None = None
+
+
+@dataclass
 class Tab:
     url: str
     url_hash: str
@@ -37,6 +43,7 @@ class Tab:
     sighting_count: int = 0
     first_seen: int | None = None
     still_open: bool = False
+    tags: list[Tag] = field(default_factory=list)
 
 
 @dataclass
@@ -45,12 +52,6 @@ class TabSighting:
     device_id: int
     seen_at: int
     tab_active: bool
-    id: int | None = None
-
-
-@dataclass
-class Tag:
-    name: str
     id: int | None = None
 
 

@@ -207,6 +207,54 @@ main { padding: 12px 16px 60px; max-width: 1280px; margin: 0 auto; }
 .note { background: var(--note-bg); color: var(--fg); padding: 1px 6px; border-radius: 4px; margin-left: 4px; }
 .tab-actions { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
 
+/* ---- タグchip ---- */
+.tab-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 1px 4px 1px 6px;
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  font-size: 12px;
+  color: var(--fg);
+}
+.tag-remove {
+  border: none;
+  background: transparent;
+  padding: 0 4px;
+  cursor: pointer;
+  color: var(--fg-muted);
+  font-size: 14px;
+  line-height: 1;
+}
+.tag-remove:hover { color: var(--danger); background: transparent; }
+.tag-add {
+  width: 100px;
+  padding: 1px 6px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 12px;
+}
+.tag-add:focus { outline: none; border-color: var(--accent); border-style: solid; background: var(--card); }
+.bulk-tag-input {
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+  width: 120px;
+}
+
 /* ---- 一覧（カードモード） ---- */
 [data-view="card"] .tab-list {
   display: grid;

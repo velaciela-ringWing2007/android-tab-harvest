@@ -12,6 +12,23 @@
       {% if tab.still_open %}<span class="open-mark">(開いてる)</span>{% else %}<span class="closed-mark">(閉じ済)</span>{% endif %}
       {% if tab.note %}<span class="note">📝 {{ tab.note }}</span>{% endif %}
     </div>
+    <div class="tab-tags">
+      {% for tg in tab.tags %}
+        <span class="tag-chip">
+          🏷️ {{ tg.name }}
+          <button type="button" class="tag-remove"
+                  title="このタグを外す"
+                  hx-delete="/tabs/{{ tab.id }}/tags/{{ tg.id }}"
+                  hx-target="#tab-{{ tab.id }}" hx-swap="outerHTML">×</button>
+        </span>
+      {% endfor %}
+      <input type="text" class="tag-add" placeholder="+ タグ" maxlength="30"
+             name="name"
+             hx-post="/tabs/{{ tab.id }}/tags"
+             hx-trigger="keyup[key=='Enter']"
+             hx-target="#tab-{{ tab.id }}" hx-swap="outerHTML"
+             hx-include="this">
+    </div>
   </div>
 
   <div class="tab-actions">

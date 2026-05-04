@@ -12,7 +12,9 @@ import pytest
 from db import (
     add_sighting,
     add_tab_tag,
+    bulk_add_tag,
     bulk_delete_tabs,
+    bulk_remove_tag,
     bulk_update_status,
     count_tabs,
     delete_device,
@@ -575,6 +577,55 @@ class TestBulk:
             )
             assert (await cur.fetchone())[0] == 0
         assert n == 2
+
+    async def test_bulk_add_tag_creates_and_attaches(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            n = await bulk_add_tag(conn, [ids["t1"], ids["t3"]], "あとで読む")
+            await conn.commit()
+            tags_t1 = await list_tab_tags(conn, ids["t1"])
+            tags_t2 = await list_tab_tags(conn, ids["t2"])
+            tags_t3 = await list_tab_tags(conn, ids["t3"])
+        assert n == 2
+        assert any(t.name == "あとで読む" for t in tags_t1)
+        assert all(t.name != "あとで読む" for t in tags_t2)  # 対象外
+        assert any(t.name == "あとで読む" for t in tags_t3)
+
+    async def test_bulk_add_tag_empty_name_raises(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            with pytest.raises(ValueError):
+                await bulk_add_tag(conn, [ids["t1"]], "  ")
+
+    async def test_bulk_remove_tag(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await bulk_add_tag(conn, [ids["t1"], ids["t2"]], "shared")
+            await conn.commit()
+            cur = await conn.execute("SELECT id FROM tags WHERE name = 'shared'")
+            tag_id = (await cur.fetchone())[0]
+            n = await bulk_remove_tag(conn, [ids["t1"], ids["t2"]], tag_id)
+            await conn.commit()
+            tags_t1 = await list_tab_tags(conn, ids["t1"])
+            tags_t2 = await list_tab_tags(conn, ids["t2"])
+        assert n == 2
+        assert all(t.id != tag_id for t in tags_t1)
+        assert all(t.id != tag_id for t in tags_t2)
+
+
+class TestTabTags:
+    async def test_list_tabs_returns_tags(self, db_path: str) -> None:
+        ids = await _seed(db_path)
+        async with get_db(db_path) as conn:
+            await add_tab_tag(conn, ids["t1"], "alpha")
+            await add_tab_tag(conn, ids["t1"], "beta")
+            await conn.commit()
+            tabs = await list_tabs(conn)
+            t1 = next(t for t in tabs if t.id == ids["t1"])
+        names = sorted(t.name for t in t1.tags)
+        assert names == ["alpha", "beta"]
+        # tag id も入る
+        assert all(t.id is not None for t in t1.tags)
 
 
 class TestTags:

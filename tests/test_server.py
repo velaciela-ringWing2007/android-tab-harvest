@@ -251,6 +251,41 @@ class TestBulkAction:
         assert r.status_code == 200
         assert 'name="tag" value="tech"' in r.text
 
+    async def test_bulk_tag_add(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={
+                "action": "tag_add", "tab_ids": ["1", "3"], "tag_name": "newtag",
+                "sort": "updated", "page": "1", "per_page": "50",
+            },
+        )
+        assert r.status_code == 200
+        async with get_db(server.DB_PATH) as conn:
+            tags1 = await list_tab_tags(conn, 1)
+            tags3 = await list_tab_tags(conn, 3)
+        assert any(t.name == "newtag" for t in tags1)
+        assert any(t.name == "newtag" for t in tags3)
+
+    async def test_bulk_tag_add_empty_name_400(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={
+                "action": "tag_add", "tab_ids": ["1"], "tag_name": "  ",
+                "sort": "updated", "page": "1", "per_page": "50",
+            },
+        )
+        assert r.status_code == 400
+
+    async def test_bulk_tag_remove_requires_tag_id(self, client: AsyncClient) -> None:
+        r = await client.post(
+            "/tabs/bulk",
+            data={
+                "action": "tag_remove", "tab_ids": ["1"],
+                "sort": "updated", "page": "1", "per_page": "50",
+            },
+        )
+        assert r.status_code == 400
+
 
 class TestSortOrder:
     async def test_default_is_desc(self, client: AsyncClient) -> None:

@@ -188,6 +188,13 @@ def _row_to_tab(row: aiosqlite.Row | tuple) -> Tab:
     """list_tabs / get_tab で組み立てた行を Tab dataclass に詰める。"""
     devices_raw: str | None = row[10]
     devices_list = [d for d in (devices_raw.split("\x1f") if devices_raw else []) if d]
+    tags_raw: str | None = row[14]
+    tags: list[Tag] = []
+    if tags_raw:
+        for entry in tags_raw.split("\x1f"):
+            if ":" in entry:
+                tid, name = entry.split(":", 1)
+                tags.append(Tag(id=int(tid), name=name))
     return Tab(
         id=row[0],
         url=row[1],
@@ -203,6 +210,7 @@ def _row_to_tab(row: aiosqlite.Row | tuple) -> Tab:
         sighting_count=row[11] or 0,
         first_seen=row[12],
         still_open=bool(row[13]) if row[13] is not None else False,
+        tags=tags,
     )
 
 
@@ -218,7 +226,10 @@ SELECT
   (SELECT COUNT(*) FROM tab_sightings s WHERE s.tab_id = t.id) AS sighting_count,
   (SELECT MIN(s.seen_at) FROM tab_sightings s WHERE s.tab_id = t.id) AS first_seen,
   (SELECT s.tab_active FROM tab_sightings s WHERE s.tab_id = t.id
-     ORDER BY s.seen_at DESC LIMIT 1) AS still_open
+     ORDER BY s.seen_at DESC LIMIT 1) AS still_open,
+  (SELECT GROUP_CONCAT(g.id || ':' || g.name, CHAR(31))
+     FROM tab_tags tt JOIN tags g ON tt.tag_id = g.id
+     WHERE tt.tab_id = t.id ORDER BY g.name) AS tags
 FROM tabs t
 """
 
@@ -474,3 +485,48 @@ async def remove_tab_tag(
     await conn.execute(
         "DELETE FROM tab_tags WHERE tab_id = ? AND tag_id = ?", (tab_id, tag_id)
     )
+
+
+async def bulk_add_tag(
+    conn: aiosqlite.Connection, tab_ids: list[int], tag_name: str
+) -> int:
+    """指定IDのタブに同じタグを一括付与。タグが無ければ作成。
+
+    実在する tab_id だけを対象にし、付与した tab 数を返す
+    （存在しないIDが混じっても FK エラーで全部失敗させない）。
+    """
+    if not tab_ids:
+        return 0
+    name = tag_name.strip()
+    if not name:
+        raise ValueError("tag name is empty")
+    placeholders = ",".join("?" * len(tab_ids))
+    cur = await conn.execute(
+        f"SELECT id FROM tabs WHERE id IN ({placeholders})", tab_ids
+    )
+    valid_ids = [r[0] for r in await cur.fetchall()]
+    if not valid_ids:
+        return 0
+    await conn.execute("INSERT OR IGNORE INTO tags (name) VALUES (?)", (name,))
+    cur = await conn.execute("SELECT id FROM tags WHERE name = ?", (name,))
+    row = await cur.fetchone()
+    assert row is not None
+    tag_id = int(row[0])
+    await conn.executemany(
+        "INSERT OR IGNORE INTO tab_tags (tab_id, tag_id) VALUES (?, ?)",
+        [(tid, tag_id) for tid in valid_ids],
+    )
+    return len(valid_ids)
+
+
+async def bulk_remove_tag(
+    conn: aiosqlite.Connection, tab_ids: list[int], tag_id: int
+) -> int:
+    if not tab_ids:
+        return 0
+    placeholders = ",".join("?" * len(tab_ids))
+    cur = await conn.execute(
+        f"DELETE FROM tab_tags WHERE tag_id = ? AND tab_id IN ({placeholders})",
+        [tag_id, *tab_ids],
+    )
+    return cur.rowcount or 0

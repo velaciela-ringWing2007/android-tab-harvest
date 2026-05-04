@@ -204,6 +204,8 @@ async def bulk_action(
     request: Request,
     action: str = Form(...),
     tab_ids: list[int] = Form(default=[]),
+    tag_name: str = Form(""),
+    tag_id: int | None = Form(None),
     # フィルタ保持用（hidden）
     status: str | None = Form(None),
     device: int | None = Form(None),
@@ -222,6 +224,21 @@ async def bulk_action(
         elif action in ALLOWED_STATUS:
             async with get_db(DB_PATH) as conn:
                 await db.bulk_update_status(conn, tab_ids, action, _now())  # type: ignore[arg-type]
+                await conn.commit()
+        elif action == "tag_add":
+            if not tag_name.strip():
+                raise HTTPException(status_code=400, detail="tag_name required")
+            async with get_db(DB_PATH) as conn:
+                try:
+                    await db.bulk_add_tag(conn, tab_ids, tag_name)
+                except ValueError as e:
+                    raise HTTPException(status_code=400, detail=str(e)) from e
+                await conn.commit()
+        elif action == "tag_remove":
+            if tag_id is None:
+                raise HTTPException(status_code=400, detail="tag_id required")
+            async with get_db(DB_PATH) as conn:
+                await db.bulk_remove_tag(conn, tab_ids, tag_id)
                 await conn.commit()
         else:
             raise HTTPException(status_code=400, detail="invalid action")
