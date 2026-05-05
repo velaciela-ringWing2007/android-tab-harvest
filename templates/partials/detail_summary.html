@@ -14,8 +14,11 @@
     </div>
   </div>
 
-  <div class="markdown-content" id="detail-md-content"></div>
-  <script type="application/json" id="detail-md-data">{{ tab.summary_long|tojson_ja }}</script>
+  {# data-md 属性に raw text を入れる（Jinja の auto escape で "/&/<>が安全に encode される）。
+     dataset.md で読むと un-escape された state で取れる。<script type=application/json>
+     経由は HTMX swap で取りにくかったため属性方式に変更。 #}
+  <div class="markdown-content" id="detail-md-content"
+       data-md="{{ tab.summary_long or '' }}"></div>
 
   {% if tab.summary %}
   <details class="detail-short">
@@ -38,15 +41,5 @@
     <button type="button" onclick="document.getElementById('detail-dialog').close()">閉じる</button>
   </div>
 </div>
-<script>
-  (function () {
-    const data = JSON.parse(document.getElementById('detail-md-data').textContent || '""');
-    const target = document.getElementById('detail-md-content');
-    if (target && window.marked) {
-      target.innerHTML = window.marked.parse(data || '');
-    } else if (target) {
-      target.textContent = data || '';  // marked が読めない時のフォールバック
-    }
-    document.getElementById('detail-dialog').showModal();
-  })();
-</script>
+<!-- showModal() と marked レンダは base.html の htmx:afterSwap リスナーが行う -->
+

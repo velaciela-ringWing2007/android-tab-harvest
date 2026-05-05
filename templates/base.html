@@ -87,6 +87,30 @@
       if (e.target.matches('input[name="tab_ids"], #select-all')) refreshBulkBar();
     });
     document.body.addEventListener('htmx:afterSwap', refreshBulkBar);
+
+    // ダイアログ open は HX-Trigger ヘッダ経由のJSイベントで行う。
+    // afterSwap の event.target 判定よりこちらの方が HTMX バージョンに依存せず確実。
+    function openDialog(id) {
+      const dlg = document.getElementById(id);
+      if (dlg && typeof dlg.showModal === 'function' && !dlg.open) {
+        try { dlg.showModal(); } catch (e) { console.error('dialog open failed', e); }
+      }
+    }
+    document.body.addEventListener('openCollectDialog', () => openDialog('collect-dialog'));
+    document.body.addEventListener('openSummarizeDialog', () => openDialog('summarize-dialog'));
+    document.body.addEventListener('openDetailDialog', () => {
+      const dlg = document.getElementById('detail-dialog');
+      const target = dlg && dlg.querySelector('#detail-md-content');
+      if (target) {
+        const raw = target.dataset.md || '';
+        if (window.marked) {
+          target.innerHTML = window.marked.parse(raw);
+        } else {
+          target.textContent = raw;
+        }
+      }
+      openDialog('detail-dialog');
+    });
   </script>
 
   {% if msg %}

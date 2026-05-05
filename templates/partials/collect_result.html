@@ -23,4 +23,5 @@
             onclick="document.getElementById('collect-dialog').close(); location.reload()">一覧を更新</button>
   </div>
 </div>
-<script>document.getElementById('collect-dialog').showModal();</script>
+<!-- showModal() は base.html の htmx:afterSwap リスナーが呼ぶ -->
+

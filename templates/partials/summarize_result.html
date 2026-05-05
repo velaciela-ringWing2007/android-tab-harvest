@@ -40,4 +40,5 @@
             onclick="document.getElementById('summarize-dialog').close(); location.reload()">一覧を更新</button>
   </div>
 </div>
-<script>document.getElementById('summarize-dialog').showModal();</script>
+<!-- showModal() は base.html の htmx:afterSwap リスナーが呼ぶ -->
+

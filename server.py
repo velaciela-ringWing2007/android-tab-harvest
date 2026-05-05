@@ -341,7 +341,8 @@ async def trigger_collect(request: Request):
     report = await collect_async(DB_PATH)
     if request.headers.get("HX-Request") == "true":
         return templates.TemplateResponse(
-            request, "partials/collect_result.html", {"report": report}
+            request, "partials/collect_result.html", {"report": report},
+            headers={"HX-Trigger-After-Swap": "openCollectDialog"},
         )
     msg = (
         f"処理 {report.devices_processed}台 / 検出 {report.tabs_collected}件 "
@@ -384,7 +385,8 @@ async def summarize_one(
         async with get_db(DB_PATH) as conn:
             tab = await db.get_tab(conn, tab_id)
     return templates.TemplateResponse(
-        request, "partials/detail_summary.html", {"tab": tab, "cached": cached}
+        request, "partials/detail_summary.html", {"tab": tab, "cached": cached},
+        headers={"HX-Trigger-After-Swap": "openDetailDialog"},
     )
 
 
@@ -401,7 +403,8 @@ async def summarize_batch(request: Request, max: int = Form(10)):
                 tab = await db.get_tab(conn, tab_id)
                 items.append({"tab": tab, "result": result})
         return templates.TemplateResponse(
-            request, "partials/summarize_result.html", {"items": items}
+            request, "partials/summarize_result.html", {"items": items},
+            headers={"HX-Trigger-After-Swap": "openSummarizeDialog"},
         )
     n_dead = sum(1 for _, r in results if r.is_dead)
     n_err = sum(1 for _, r in results if r.error)
