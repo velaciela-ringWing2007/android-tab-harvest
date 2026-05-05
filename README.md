@@ -157,3 +157,7 @@ journalctl --user -u tab-harvest.service -n 50
 
 - rclone で Google Drive に tabs.db バックアップ
 - PWA化でスマホからも閲覧
+
+## License
+
+[MIT](LICENSE) © velaciela-ringWing2007
